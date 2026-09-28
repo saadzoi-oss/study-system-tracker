@@ -1,121 +1,75 @@
 (() => {
 
-
-  const $ =
-    id =>
-      document.getElementById(
-        id
-      );
-
-
+  const $ = id =>
+    document.getElementById(id);
 
   const weekStart =
     $("weekStart");
 
-
   const loadBtn =
     $("loadBtn");
-
 
   const exportBtn =
     $("exportBtn");
 
-
   const studentCount =
     $("studentCount");
-
 
   const averageTime =
     $("averageTime");
 
-
   const averageDays =
     $("averageDays");
-
 
   const stageAverages =
     $("stageAverages");
 
-
   const classAverages =
     $("classAverages");
-
 
   const methodUsage =
     $("methodUsage");
 
-
   const summaryText =
     $("summaryText");
 
-
   const adminMessage =
     $("adminMessage");
-
 
   let currentData =
     null;
 
 
-
-  // ==========================================
-  // CURRENT WEEK
-  // ==========================================
-
-
   function getMonday() {
-
 
     const date =
       new Date();
 
-
     const day =
-      (
-        date.getDay() +
-        6
-      ) % 7;
-
+      (date.getDay() + 6) % 7;
 
     date.setDate(
-      date.getDate() -
-      day
+      date.getDate() - day
     );
 
-
     return date;
-
   }
 
 
-
-  function dateString(
-    date
-  ) {
-
+  function dateString(date) {
 
     const year =
       date.getFullYear();
 
-
     const month =
       String(
-        date.getMonth() +
-        1
-      ).padStart(
-        2,
-        "0"
-      );
-
+        date.getMonth() + 1
+      ).padStart(2, "0");
 
     const day =
       String(
         date.getDate()
-      ).padStart(
-        2,
-        "0"
-      );
-
+      ).padStart(2, "0");
 
     return (
       year +
@@ -124,9 +78,7 @@
       "-" +
       day
     );
-
   }
-
 
 
   weekStart.value =
@@ -135,58 +87,36 @@
     );
 
 
-
-  // ==========================================
-  // FORMATTING
-  // ==========================================
-
-
-  function humanTime(
-    seconds
-  ) {
-
+  function humanTime(seconds) {
 
     const minutes =
       Math.round(
-        (
-          seconds || 0
-        ) / 60
+        (seconds || 0) / 60
       );
 
-
-    if (
-      minutes < 60
-    ) {
+    if (minutes < 60) {
 
       return (
         minutes +
         " min"
       );
-
     }
-
 
     const hours =
       Math.floor(
         minutes / 60
       );
 
-
     const remaining =
       minutes % 60;
 
-
-    if (
-      remaining === 0
-    ) {
+    if (remaining === 0) {
 
       return (
         hours +
         " hr"
       );
-
     }
-
 
     return (
       hours +
@@ -194,293 +124,180 @@
       remaining +
       " min"
     );
-
   }
 
 
-
-  // ==========================================
-  // JSONP CONNECTION
-  // ==========================================
-
-
-  function getAggregate(
-    selectedWeek
-  ) {
-
+  function getAggregate(selectedWeek) {
 
     return new Promise(
-      (
-        resolve,
-        reject
-      ) => {
-
+      (resolve, reject) => {
 
         const endpoint =
           window
             .STUDY_TRACKER_WEEKLY_ENDPOINT;
 
-
-        if (
-          !endpoint
-        ) {
+        if (!endpoint) {
 
           reject(
-
             new Error(
               "Add the Apps Script URL to admin-config.js."
             )
-
           );
 
-
           return;
-
         }
-
-
 
         const callbackName =
           "studyDashboardCallback_" +
           Date.now();
-
-
 
         const script =
           document.createElement(
             "script"
           );
 
-
-
         function cleanup() {
-
 
           delete window[
             callbackName
           ];
 
-
           script.remove();
-
         }
-
-
 
         window[
           callbackName
         ] =
           data => {
 
-
             cleanup();
-
 
             resolve(
               data
             );
-
           };
-
-
 
         script.onerror =
           () => {
 
-
             cleanup();
 
-
             reject(
-
               new Error(
                 "Could not connect to the reporting service."
               )
-
             );
-
           };
-
-
 
         script.src =
           endpoint +
-
           "?action=aggregate" +
-
           "&weekStart=" +
           encodeURIComponent(
             selectedWeek
           ) +
-
           "&callback=" +
           encodeURIComponent(
             callbackName
           ) +
-
           "&_=" +
           Date.now();
-
-
 
         document.body.appendChild(
           script
         );
-
       }
     );
-
   }
 
 
-
-  // ==========================================
-  // LOAD WEEK
-  // ==========================================
-
-
   loadBtn.addEventListener(
-
     "click",
-
-    () => {
-
-      loadWeek();
-
-    }
-
+    loadWeek
   );
-
 
 
   async function loadWeek() {
 
-
     adminMessage.textContent =
       "Loading...";
 
-
     try {
-
 
       const data =
         await getAggregate(
           weekStart.value
         );
 
-
-      if (
-        !data.ok
-      ) {
+      if (!data.ok) {
 
         throw new Error(
           data.error ||
           "Could not load data."
         );
-
       }
-
 
       currentData =
         data;
-
 
       renderDashboard(
         data
       );
 
-
       adminMessage.textContent =
         "";
 
-
-    } catch (
-      error
-    ) {
-
+    } catch (error) {
 
       adminMessage.textContent =
         error.message;
-
     }
-
   }
 
 
-
-  // ==========================================
-  // RENDER DASHBOARD
-  // ==========================================
-
-
-  function renderDashboard(
-    data
-  ) {
-
+  function renderDashboard(data) {
 
     studentCount.textContent =
       data.studentCount || 0;
-
 
     averageTime.textContent =
       humanTime(
         data.avgTotalSeconds
       );
 
-
     averageDays.textContent =
       Number(
         data.avgStudyDays || 0
-      ).toFixed(
-        1
-      );
-
+      ).toFixed(1);
 
     renderStageAverages(
       data
     );
 
-
     renderList(
-
       classAverages,
-
-      data.avgClassSeconds ||
-      {},
-
+      data.avgClassSeconds || {},
       true
-
     );
-
 
     renderList(
-
       methodUsage,
-
-      data.methodUsagePercent ||
-      {},
-
+      data.methodUsagePercent || {},
       false
-
     );
-
 
     summaryText.innerHTML = `
 
       <p>
-
         <strong>
           ${data.studentCount || 0}
         </strong>
 
         anonymous devices submitted
         a weekly summary.
-
       </p>
 
-
       <p>
-
         Average study time:
 
         <strong>
@@ -488,12 +305,9 @@
             data.avgTotalSeconds
           )}
         </strong>
-
       </p>
 
-
       <p>
-
         Average study days:
 
         <strong>
@@ -501,12 +315,9 @@
             data.avgStudyDays || 0
           ).toFixed(1)}
         </strong>
-
       </p>
 
-
       <p>
-
         Learn:
 
         <strong>
@@ -516,7 +327,6 @@
         </strong>
 
         <br>
-
 
         Verify:
 
@@ -528,7 +338,6 @@
 
         <br>
 
-
         Assess:
 
         <strong>
@@ -539,7 +348,6 @@
 
         <br>
 
-
         Crosscheck:
 
         <strong>
@@ -547,114 +355,82 @@
             data.avgCrosscheckSeconds
           )}
         </strong>
-
       </p>
-
     `;
-
   }
 
 
-
-  function renderStageAverages(
-    data
-  ) {
-
+  function renderStageAverages(data) {
 
     stageAverages.innerHTML =
       "";
 
-
     const values = [
-
 
       [
         "Learn",
         data.avgStage1Seconds
       ],
 
-
       [
         "Verify",
         data.avgStage2Seconds
       ],
-
 
       [
         "Assess",
         data.avgStage3Seconds
       ],
 
-
       [
         "Crosscheck",
         data.avgCrosscheckSeconds
       ]
-
     ];
 
-
-
     values.forEach(
-      (
-        [
-          name,
-          seconds
-        ]
-      ) => {
-
+      ([name, seconds]) => {
 
         const row =
           document.createElement(
             "div"
           );
 
-
         row.className =
           "list-row";
-
 
         const left =
           document.createElement(
             "span"
           );
 
-
         left.textContent =
           name;
-
 
         const right =
           document.createElement(
             "strong"
           );
 
-
         right.textContent =
           humanTime(
             seconds
           );
 
-
         row.appendChild(
           left
         );
-
 
         row.appendChild(
           right
         );
 
-
         stageAverages.appendChild(
           row
         );
-
       }
     );
-
   }
-
 
 
   function renderList(
@@ -663,309 +439,204 @@
     timeValues
   ) {
 
-
     element.innerHTML =
       "";
 
-
     const entries =
-      Object.entries(
-        data
-      )
-      .sort(
-        (
-          a,
-          b
-        ) =>
-          b[1] -
-          a[1]
-      );
+      Object.entries(data)
+        .sort(
+          (a, b) =>
+            b[1] - a[1]
+        );
 
-
-    if (
-      entries.length === 0
-    ) {
+    if (entries.length === 0) {
 
       element.innerHTML =
         '<span class="muted">No data yet.</span>';
 
       return;
-
     }
 
-
     entries.forEach(
-      (
-        [
-          name,
-          value
-        ]
-      ) => {
-
+      ([name, value]) => {
 
         const row =
           document.createElement(
             "div"
           );
 
-
         row.className =
           "list-row";
-
 
         const left =
           document.createElement(
             "span"
           );
 
-
         left.textContent =
           name;
-
 
         const right =
           document.createElement(
             "strong"
           );
 
-
         right.textContent =
           timeValues
-
-            ? humanTime(
-                value
-              )
-
-            : Math.round(
-                value
-              ) +
-              "%";
-
+            ? humanTime(value)
+            : Math.round(value) + "%";
 
         row.appendChild(
           left
         );
 
-
         row.appendChild(
           right
         );
 
-
         element.appendChild(
           row
         );
-
       }
     );
-
   }
 
 
-
-  // ==========================================
-  // EXPORT CSV
-  // ==========================================
-
-
   exportBtn.addEventListener(
-
     "click",
-
-    () => {
-
-      exportCSV();
-
-    }
-
+    exportCSV
   );
-
 
 
   function exportCSV() {
 
-
-    if (
-      !currentData
-    ) {
+    if (!currentData) {
 
       adminMessage.textContent =
         "Load a week first.";
 
       return;
-
     }
-
 
     const data =
       currentData;
 
-
-
     const rows = [
-
 
       [
         "Week Start",
         data.weekStart
       ],
 
-
       [
         "Students Represented",
         data.studentCount
       ],
-
 
       [
         "Average Total Seconds",
         data.avgTotalSeconds
       ],
 
-
       [
         "Average Study Days",
         data.avgStudyDays
       ],
-
 
       [
         "Average Learn Seconds",
         data.avgStage1Seconds
       ],
 
-
       [
         "Average Verify Seconds",
         data.avgStage2Seconds
       ],
-
 
       [
         "Average Assess Seconds",
         data.avgStage3Seconds
       ],
 
-
       [
         "Average Crosscheck Seconds",
         data.avgCrosscheckSeconds
       ],
 
-
       [],
-
 
       [
         "Class",
         "Average Seconds"
       ],
 
-
       ...Object.entries(
-        data.avgClassSeconds ||
-        {}
+        data.avgClassSeconds || {}
       ),
 
-
       [],
-
 
       [
         "Method",
         "Percent Using Method"
       ],
 
-
       ...Object.entries(
-        data.methodUsagePercent ||
-        {}
+        data.methodUsagePercent || {}
       )
-
     ];
-
-
 
     const csv =
       rows
-      .map(
-        row =>
-          row
-            .map(
-              csvCell
-            )
-            .join(
-              ","
-            )
-      )
-      .join(
-        "\n"
-      );
-
-
+        .map(
+          row =>
+            row
+              .map(csvCell)
+              .join(",")
+        )
+        .join("\n");
 
     const blob =
       new Blob(
-
-        [
-          csv
-        ],
-
+        [csv],
         {
-
           type:
             "text/csv;charset=utf-8"
-
         }
-
       );
-
-
 
     const url =
       URL.createObjectURL(
         blob
       );
 
-
-
     const link =
       document.createElement(
         "a"
       );
 
-
     link.href =
       url;
-
 
     link.download =
       "study-system-" +
       data.weekStart +
       ".csv";
 
-
     link.click();
-
 
     URL.revokeObjectURL(
       url
     );
-
   }
 
 
-
-  function csvCell(
-    value
-  ) {
-
+  function csvCell(value) {
 
     const string =
       String(
         value ?? ""
       );
-
 
     if (
       /[",\n]/.test(
@@ -974,30 +645,19 @@
     ) {
 
       return (
-
         '"' +
-
         string.replaceAll(
           '"',
           '""'
         ) +
-
         '"'
-
       );
-
     }
 
-
     return string;
-
   }
 
 
-
-  // Load current week automatically
-
   loadWeek();
-
 
 })();
