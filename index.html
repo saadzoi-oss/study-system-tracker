@@ -10,7 +10,7 @@
   <main class="app">
     <header class="topbar">
       <div><div class="eyebrow">STUDY SYSTEM</div><h1>Study System Tracker</h1></div>
-      <button id="progressBtn" class="secondary" type="button">Weekly Progress</button>
+      <button id="homeBtn" class="secondary hidden" type="button">Study Home</button>
     </header>
 
     <section id="classManagerScreen" class="stack" aria-label="Set up classes">
@@ -47,6 +47,21 @@
 
     <section id="studyScreen" class="stack hidden" aria-label="Study">
       <div id="studyClassPanel" class="stack">
+        <div id="navigationScreen" class="card" aria-label="Navigation">
+          <div class="eyebrow">STUDY HOME</div>
+          <h2>Where do you want to go?</h2>
+          <div class="nav-grid">
+            <button id="navStudyBtn" class="nav-button" type="button">
+              <strong>Study a Class</strong><span>Choose a saved class, stage, and method.</span>
+            </button>
+            <button id="editClassesBtn" class="nav-button" type="button">
+              <strong>Edit Classes</strong><span>Add or remove classes.</span>
+            </button>
+            <button id="progressBtn" class="nav-button" type="button">
+              <strong>Weekly Progress</strong><span>See your time and share a summary.</span>
+            </button>
+          </div>
+        </div>
         <div id="ankiReminderCard" class="card hidden">
           <div class="eyebrow">ANKI REMINDER</div>
           <h2 id="ankiReminderTitle">Anki review due</h2>
@@ -56,11 +71,10 @@
             <button id="dismissAnkiReminderBtn" class="secondary" type="button">Hide for now</button>
           </div>
         </div>
-        <div class="card">
-          <h2>Study Home</h2>
+        <div id="classChooserCard" class="card">
+          <h2>Choose a saved class</h2>
           <p class="muted">Choose one of your saved classes.</p>
           <div id="studyClassButtons" class="class-grid"></div>
-          <button id="editClassesBtn" class="secondary field" type="button">Edit Classes</button>
         </div>
         <div class="card">
           <div class="eyebrow">WEEKLY ANKI ROUTINE</div>
@@ -100,6 +114,7 @@
           <button id="startBtn" class="primary" type="button">Start</button>
           <button id="pauseBtn" class="secondary hidden" type="button">Pause</button>
           <button id="finishBtn" class="secondary hidden" type="button">Finish</button>
+          <button id="cancelBtn" class="secondary" type="button">Cancel</button>
         </div>
       </div>
 
@@ -112,6 +127,7 @@
           <button id="crosscheckStartBtn" class="primary" type="button">Start Crosscheck</button>
           <button id="crosscheckPauseBtn" class="secondary hidden" type="button">Pause</button>
           <button id="crosscheckFinishBtn" class="secondary hidden" type="button">Finish Crosscheck</button>
+          <button id="crosscheckCancelBtn" class="secondary" type="button">Cancel Stage</button>
         </div>
       </div>
 
@@ -141,7 +157,7 @@
       <div class="card"><h2>Methods</h2><div id="methodBreakdown"></div></div>
       <div class="card">
         <h2>Share weekly summary</h2>
-        <p class="muted">Send this week's anonymous progress to your teacher.</p>
+        <p class="muted">This report includes a device ID and your class names, but not your name. It includes activity from this browser only.</p>
         <button id="submitWeekBtn" class="primary" type="button">Share Weekly Summary</button>
         <p id="submissionStatus" class="muted field" aria-live="polite"></p>
       </div>
