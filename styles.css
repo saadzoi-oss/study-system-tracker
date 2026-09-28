@@ -146,6 +146,10 @@ select,input{
 .field{margin-top:16px}
 label{display:block;font-weight:650}
 .class-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.nav-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.nav-button{display:grid;gap:8px;text-align:left;padding:16px;background:#fff;border:1px solid var(--border);border-radius:12px;color:var(--text)}
+.nav-button:hover,.class-button:hover{border-color:var(--accent)}
+.nav-button strong{font-size:1.05rem}.nav-button span{color:var(--muted);font-size:.9rem}
 .class-button{display:grid;gap:4px;text-align:left;padding:14px;background:#fff;border:1px solid var(--border);border-radius:10px}
 .class-button span,.saved-class-subject{font-size:.9rem;color:var(--muted)}
 .saved-class-row,.list-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
@@ -162,7 +166,7 @@ label{display:block;font-weight:650}
 .muted{color:var(--muted)}
 .hidden{display:none !important}
 @media (max-width:680px){
-  .stage-grid,.method-grid,.class-grid{grid-template-columns:1fr}
+  .stage-grid,.method-grid,.class-grid,.nav-grid{grid-template-columns:1fr}
   .stats{grid-template-columns:1fr 1fr}
   .topbar{align-items:flex-start}
 }
