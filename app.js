@@ -198,18 +198,32 @@
     showHome();
   });
   $("editClassesBtn").addEventListener("click", showClassManager);
-  $("navStudyBtn").addEventListener("click", () => {
-    $("classChooserCard").scrollIntoView?.({ behavior: "smooth", block: "start" });
-    $("studyClassButtons").querySelector("button")?.focus();
-  });
   $("homeBtn").addEventListener("click", () => {
-    if (!$("timerPanel").classList.contains("hidden") ||
-        !$("crosscheckPanel").classList.contains("hidden")) {
-      message("Cancel or finish this stage before going Home.");
-      return;
-    }
+    const inCrosscheck = !$("crosscheckPanel").classList.contains("hidden");
+    const inTimer = !$("timerPanel").classList.contains("hidden");
+    if (inCrosscheck && !window.confirm(
+      "Return to Study Home? Your Verify time and crosscheck time will be discarded."
+    )) return;
+    if (inTimer && (startedAt !== null || elapsed > 0) && !window.confirm(
+      "Return to Study Home? This unsaved stage time will be discarded."
+    )) return;
     classes().length ? showHome() : showClassManager();
   });
+
+  function resetInProgress() {
+    clearInterval(tickInterval);
+    clearInterval(crossInterval);
+    tickInterval = null;
+    crossInterval = null;
+    startedAt = null;
+    crossStartedAt = null;
+    elapsed = 0;
+    crossElapsed = 0;
+    studySeconds = 0;
+    crosscheckSeconds = 0;
+    $("timerNotice").textContent = "";
+    $("crosscheckNotice").textContent = "";
+  }
 
   function showClassManager() {
     pendingAnki = false;
@@ -220,6 +234,7 @@
     resetClassForm();
   }
   function showHome() {
+    resetInProgress();
     pendingAnki = false;
     selectedClass = null;
     selectedStage = null;
@@ -233,6 +248,7 @@
       .forEach(id => visible(id, false));
     renderClassButtons();
     renderReminder();
+    message("");
   }
   function renderClassButtons() {
     const area = $("studyClassButtons");
@@ -316,6 +332,7 @@
     $("timerMethod").textContent = method;
     $("timerInstruction").textContent = stages[selectedStage].instruction;
     $("timerDisplay").textContent = "00:00";
+    $("timerNotice").textContent = "";
     $("pauseBtn").textContent = "Pause";
     visible("startBtn", true);
     visible("pauseBtn", false);
@@ -328,7 +345,11 @@
   }
   $("startBtn").addEventListener("click", () => {
     startedAt = Date.now();
-    tickInterval = setInterval(() => { $("timerDisplay").textContent = fmt(current(elapsed, startedAt)); }, 250);
+    tickInterval = setInterval(() => {
+      const time = current(elapsed, startedAt);
+      $("timerDisplay").textContent = fmt(time);
+      if (time >= 30) $("timerNotice").textContent = "";
+    }, 250);
     visible("startBtn", false);
     visible("pauseBtn", true);
     visible("finishBtn", true);
@@ -337,26 +358,35 @@
     if (startedAt !== null) {
       stopStudyTimer();
       $("pauseBtn").textContent = "Resume";
+      if ($("timerNotice").textContent) $("timerNotice").textContent = elapsed < 30
+        ? "Paused before 30 seconds. Press Resume to continue, or discard this stage." : "";
     } else {
       startedAt = Date.now();
-      tickInterval = setInterval(() => { $("timerDisplay").textContent = fmt(current(elapsed, startedAt)); }, 250);
+      $("timerNotice").textContent = "";
+      tickInterval = setInterval(() => {
+        const time = current(elapsed, startedAt);
+        $("timerDisplay").textContent = fmt(time);
+      }, 250);
       $("pauseBtn").textContent = "Pause";
     }
   });
   $("finishBtn").addEventListener("click", () => {
-    stopStudyTimer();
-    if (elapsed < 30) {
-      $("pauseBtn").textContent = "Resume";
-      message("Study for at least 30 seconds, or Cancel without saving.");
+    if (current(elapsed, startedAt) < 30) {
+      $("timerNotice").textContent = startedAt === null
+        ? "Study for at least 30 seconds. Press Resume to continue, or discard this stage."
+        : "Study for at least 30 seconds before finishing. The timer is still running.";
       return;
     }
+    stopStudyTimer();
     studySeconds = Math.floor(elapsed);
+    $("timerNotice").textContent = "";
     message("");
     visible("timerPanel", false);
     if (selectedStage === 2) {
       crossElapsed = 0;
       crossStartedAt = null;
       $("crosscheckDisplay").textContent = "00:00";
+      $("crosscheckNotice").textContent = "";
       $("crosscheckPauseBtn").textContent = "Pause";
       visible("crosscheckStartBtn", true);
       visible("crosscheckPauseBtn", false);
@@ -368,15 +398,23 @@
     }
   });
   $("cancelBtn").addEventListener("click", () => {
+    if ((startedAt !== null || elapsed > 0) && !window.confirm(
+      "Discard this stage? Its unsaved study time will be lost."
+    )) return;
     stopStudyTimer();
     elapsed = 0;
+    $("timerNotice").textContent = "";
     visible("timerPanel", false);
     openStages();
     message("Canceled. No stage was saved.");
   });
   $("crosscheckStartBtn").addEventListener("click", () => {
     crossStartedAt = Date.now();
-    crossInterval = setInterval(() => { $("crosscheckDisplay").textContent = fmt(current(crossElapsed, crossStartedAt)); }, 250);
+    crossInterval = setInterval(() => {
+      const time = current(crossElapsed, crossStartedAt);
+      $("crosscheckDisplay").textContent = fmt(time);
+      if (time >= 15) $("crosscheckNotice").textContent = "";
+    }, 250);
     visible("crosscheckStartBtn", false);
     visible("crosscheckPauseBtn", true);
     visible("crosscheckFinishBtn", true);
@@ -385,27 +423,38 @@
     if (crossStartedAt !== null) {
       stopCrossTimer();
       $("crosscheckPauseBtn").textContent = "Resume";
+      if ($("crosscheckNotice").textContent) $("crosscheckNotice").textContent = crossElapsed < 15
+        ? "Paused before 15 seconds. Press Resume to continue, or discard the Verify session." : "";
     } else {
       crossStartedAt = Date.now();
-      crossInterval = setInterval(() => { $("crosscheckDisplay").textContent = fmt(current(crossElapsed, crossStartedAt)); }, 250);
+      $("crosscheckNotice").textContent = "";
+      crossInterval = setInterval(() => {
+        $("crosscheckDisplay").textContent = fmt(current(crossElapsed, crossStartedAt));
+      }, 250);
       $("crosscheckPauseBtn").textContent = "Pause";
     }
   });
   $("crosscheckFinishBtn").addEventListener("click", () => {
-    stopCrossTimer();
-    if (crossElapsed < 15) {
-      $("crosscheckPauseBtn").textContent = "Resume";
-      message("Crosscheck for at least 15 seconds, or Cancel Stage without saving.");
+    if (current(crossElapsed, crossStartedAt) < 15) {
+      $("crosscheckNotice").textContent = crossStartedAt === null
+        ? "Crosscheck for at least 15 seconds. Press Resume to continue, or discard the Verify session."
+        : "Crosscheck for at least 15 seconds before finishing. The timer is still running.";
       return;
     }
+    stopCrossTimer();
     crosscheckSeconds = Math.floor(crossElapsed);
+    $("crosscheckNotice").textContent = "";
     message("");
     visible("crosscheckPanel", false);
     saveStage();
   });
   $("crosscheckCancelBtn").addEventListener("click", () => {
+    if (!window.confirm("Discard the Verify session? Both Verify and crosscheck time will be lost.")) return;
     stopCrossTimer();
     crossElapsed = 0;
+    studySeconds = 0;
+    crosscheckSeconds = 0;
+    $("crosscheckNotice").textContent = "";
     visible("crosscheckPanel", false);
     openStages();
     message("Canceled. No stage was saved.");
