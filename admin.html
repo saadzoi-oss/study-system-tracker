@@ -1,10 +1,7 @@
 <!DOCTYPE html>
-
 <html lang="en">
 
-
 <head>
-
   <meta charset="UTF-8">
 
   <meta
@@ -12,31 +9,20 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-
-  <title>
-    Study System Dashboard
-  </title>
-
+  <title>Study System Dashboard</title>
 
   <link
     rel="stylesheet"
     href="styles.css"
   >
-
 </head>
-
-
 
 <body>
 
-
 <main class="app">
 
-
   <header class="topbar">
-
     <div>
-
       <div class="eyebrow">
         STUDY SYSTEM
       </div>
@@ -44,35 +30,24 @@
       <h1>
         Weekly Group Dashboard
       </h1>
-
     </div>
-
   </header>
-
 
 
   <div class="card">
 
-
     <label for="weekStart">
-
       <strong>
         Week starting
       </strong>
-
     </label>
-
 
     <input
       id="weekStart"
       type="date"
     >
 
-
-    <div
-      class="actions left button-space"
-    >
-
+    <div class="actions left button-space">
 
       <button
         id="loadBtn"
@@ -82,7 +57,6 @@
         Load Week
       </button>
 
-
       <button
         id="exportBtn"
         class="secondary"
@@ -91,18 +65,14 @@
         Export CSV
       </button>
 
-
     </div>
 
   </div>
 
 
-
   <div class="metric-grid">
 
-
     <div class="metric-card">
-
       <span>
         Students Represented
       </span>
@@ -110,13 +80,10 @@
       <strong id="studentCount">
         0
       </strong>
-
     </div>
 
 
-
     <div class="metric-card">
-
       <span>
         Average Study Time
       </span>
@@ -124,13 +91,10 @@
       <strong id="averageTime">
         0 min
       </strong>
-
     </div>
 
 
-
     <div class="metric-card">
-
       <span>
         Average Study Days
       </span>
@@ -138,12 +102,9 @@
       <strong id="averageDays">
         0
       </strong>
-
     </div>
 
-
   </div>
-
 
 
   <div class="card">
@@ -157,9 +118,7 @@
   </div>
 
 
-
   <div class="two-column">
-
 
     <div class="card">
 
@@ -172,7 +131,6 @@
     </div>
 
 
-
     <div class="card">
 
       <h2>
@@ -180,17 +138,15 @@
       </h2>
 
       <p class="muted">
-        Percentage of weekly reports
-        that used each method at least once.
+        Percentage of weekly reports that used
+        each method at least once.
       </p>
 
       <div id="methodUsage"></div>
 
     </div>
 
-
   </div>
-
 
 
   <div class="card">
@@ -204,21 +160,16 @@
   </div>
 
 
-
   <p
     id="adminMessage"
     class="muted"
   ></p>
 
-
 </main>
 
 
 <script src="admin-config.js"></script>
-
 <script src="admin.js"></script>
 
-
 </body>
-
 </html>
