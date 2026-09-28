@@ -1,0 +1,880 @@
+:root {
+
+  --background: #f7f7f5;
+
+  --card: #ffffff;
+
+  --text: #1f2937;
+
+  --muted: #6b7280;
+
+  --border: #d1d5db;
+
+  --accent: #2563eb;
+
+  --accent-dark: #1d4ed8;
+
+  --learn: #64748b;
+
+  --verify: #0f766e;
+
+  --assess: #7c3aed;
+
+  --crosscheck: #b45309;
+}
+
+
+* {
+  box-sizing: border-box;
+}
+
+
+body {
+
+  margin: 0;
+
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  background:
+    var(--background);
+
+  color:
+    var(--text);
+}
+
+
+button,
+select,
+input {
+
+  font: inherit;
+}
+
+
+button {
+
+  cursor: pointer;
+
+  min-height: 44px;
+}
+
+
+.app {
+
+  width:
+    min(
+      900px,
+      calc(100% - 24px)
+    );
+
+  margin:
+    24px auto 60px;
+}
+
+
+/* HEADER */
+
+
+.topbar {
+
+  display: flex;
+
+  justify-content:
+    space-between;
+
+  align-items:
+    center;
+
+  gap: 16px;
+
+  margin-bottom:
+    22px;
+}
+
+
+h1,
+h2,
+p {
+
+  margin-top: 0;
+}
+
+
+h1 {
+
+  margin-bottom: 0;
+
+  font-size:
+    1.4rem;
+}
+
+
+h2 {
+
+  font-size:
+    1.15rem;
+}
+
+
+.eyebrow {
+
+  color:
+    var(--muted);
+
+  font-size:
+    0.8rem;
+
+  font-weight:
+    700;
+
+  letter-spacing:
+    0.05em;
+}
+
+
+.muted {
+
+  color:
+    var(--muted);
+}
+
+
+/* CARDS */
+
+
+.card,
+.timer-card,
+.metric-card {
+
+  background:
+    var(--card);
+
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    16px;
+
+  padding:
+    18px;
+
+  margin-bottom:
+    18px;
+}
+
+
+.timer-card {
+
+  text-align:
+    center;
+
+  padding:
+    30px 18px;
+}
+
+
+/* FORM */
+
+
+select,
+input {
+
+  width:
+    100%;
+
+  margin-top:
+    8px;
+
+  padding:
+    12px;
+
+  min-height:
+    46px;
+
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    10px;
+
+  background:
+    white;
+
+  color:
+    var(--text);
+}
+
+
+.form-section {
+
+  margin-top:
+    18px;
+}
+
+
+.button-space {
+
+  margin-top:
+    16px;
+}
+
+
+/* SAVED CLASSES */
+
+
+.saved-class-row {
+
+  display:
+    flex;
+
+  justify-content:
+    space-between;
+
+  align-items:
+    center;
+
+  gap:
+    12px;
+
+  padding:
+    12px 0;
+
+  border-bottom:
+    1px solid #ececec;
+}
+
+
+.saved-class-info {
+
+  min-width:
+    0;
+}
+
+
+.saved-class-name {
+
+  display:
+    block;
+
+  font-weight:
+    700;
+}
+
+
+.saved-class-subject {
+
+  display:
+    block;
+
+  color:
+    var(--muted);
+
+  font-size:
+    0.9rem;
+
+  margin-top:
+    3px;
+}
+
+
+/* CLASS BUTTONS */
+
+
+.class-button-grid {
+
+  display:
+    grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap:
+    10px;
+}
+
+
+.class-button {
+
+  text-align:
+    left;
+
+  background:
+    white;
+
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    12px;
+
+  padding:
+    14px;
+}
+
+
+.class-button:hover {
+
+  border-color:
+    var(--accent);
+}
+
+
+.class-button strong {
+
+  display:
+    block;
+
+  font-size:
+    1.05rem;
+}
+
+
+.class-button span {
+
+  display:
+    block;
+
+  color:
+    var(--muted);
+
+  font-size:
+    0.85rem;
+
+  margin-top:
+    4px;
+}
+
+
+.selected-class-banner {
+
+  display:
+    flex;
+
+  gap:
+    8px;
+
+  align-items:
+    baseline;
+
+  margin-bottom:
+    18px;
+
+  padding:
+    12px 14px;
+
+  background:
+    white;
+
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    12px;
+}
+
+
+/* STAGES */
+
+
+.stage-grid {
+
+  display:
+    grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      1fr
+    );
+
+  gap:
+    12px;
+
+  margin-bottom:
+    18px;
+}
+
+
+.stage-card {
+
+  display:
+    grid;
+
+  gap:
+    8px;
+
+  min-height:
+    165px;
+
+  padding:
+    16px;
+
+  text-align:
+    left;
+
+  color:
+    var(--text);
+
+  background:
+    white;
+
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    16px;
+}
+
+
+.stage-card strong {
+
+  font-size:
+    1.25rem;
+}
+
+
+.stage-card:hover {
+
+  border-color:
+    var(--accent);
+}
+
+
+.stage-card.selected {
+
+  border-color:
+    var(--accent);
+
+  outline:
+    3px solid
+    rgba(
+      37,
+      99,
+      235,
+      0.14
+    );
+}
+
+
+/* METHODS */
+
+
+.method-grid {
+
+  display:
+    grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      1fr
+    );
+
+  gap:
+    10px;
+}
+
+
+.method-grid button {
+
+  padding:
+    14px;
+
+  text-align:
+    left;
+
+  color:
+    var(--text);
+
+  background:
+    white;
+
+  border:
+    1px solid
+    var(--border);
+
+  border-radius:
+    10px;
+}
+
+
+.method-grid button:hover {
+
+  border-color:
+    var(--accent);
+}
+
+
+/* TIMER */
+
+
+.method-name {
+
+  font-size:
+    1.25rem;
+
+  font-weight:
+    650;
+}
+
+
+.timer-instruction {
+
+  max-width:
+    600px;
+
+  margin:
+    12px auto 0;
+}
+
+
+.timer {
+
+  margin:
+    32px 0;
+
+  font-size:
+    clamp(
+      4rem,
+      13vw,
+      7rem
+    );
+
+  font-weight:
+    750;
+
+  font-variant-numeric:
+    tabular-nums;
+
+  letter-spacing:
+    -0.05em;
+}
+
+
+/* BUTTONS */
+
+
+.actions {
+
+  display:
+    flex;
+
+  justify-content:
+    center;
+
+  gap:
+    10px;
+
+  flex-wrap:
+    wrap;
+}
+
+
+.actions.left {
+
+  justify-content:
+    flex-start;
+}
+
+
+.primary,
+.secondary {
+
+  border-radius:
+    10px;
+
+  padding:
+    12px 18px;
+
+  font-weight:
+    700;
+}
+
+
+.primary {
+
+  background:
+    var(--accent);
+
+  color:
+    white;
+
+  border:
+    1px solid
+    var(--accent);
+}
+
+
+.primary:hover {
+
+  background:
+    var(--accent-dark);
+}
+
+
+.secondary {
+
+  background:
+    white;
+
+  color:
+    var(--text);
+
+  border:
+    1px solid
+    var(--border);
+}
+
+
+/* WEEKLY METRICS */
+
+
+.metric-grid {
+
+  display:
+    grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      1fr
+    );
+
+  gap:
+    12px;
+
+  margin-bottom:
+    18px;
+}
+
+
+.metric-card {
+
+  display:
+    grid;
+
+  gap:
+    6px;
+}
+
+
+.metric-card span {
+
+  color:
+    var(--muted);
+}
+
+
+.metric-card strong {
+
+  font-size:
+    1.55rem;
+}
+
+
+/* BREAKDOWN */
+
+
+.two-column {
+
+  display:
+    grid;
+
+  grid-template-columns:
+    1fr 1fr;
+
+  gap:
+    16px;
+}
+
+
+.list-row {
+
+  display:
+    flex;
+
+  justify-content:
+    space-between;
+
+  gap:
+    12px;
+
+  padding:
+    10px 0;
+
+  border-bottom:
+    1px solid #ececec;
+}
+
+
+/* BARS */
+
+
+.bar-row {
+
+  display:
+    grid;
+
+  grid-template-columns:
+    100px 1fr 70px;
+
+  align-items:
+    center;
+
+  gap:
+    12px;
+
+  margin:
+    12px 0;
+}
+
+
+.bar-track {
+
+  height:
+    12px;
+
+  background:
+    #e5e7eb;
+
+  border-radius:
+    100px;
+
+  overflow:
+    hidden;
+}
+
+
+.bar-fill {
+
+  height:
+    100%;
+
+  border-radius:
+    100px;
+
+  background:
+    var(--accent);
+}
+
+
+.bar-fill.learn {
+
+  background:
+    var(--learn);
+}
+
+
+.bar-fill.verify {
+
+  background:
+    var(--verify);
+}
+
+
+.bar-fill.assess {
+
+  background:
+    var(--assess);
+}
+
+
+.bar-fill.crosscheck {
+
+  background:
+    var(--crosscheck);
+}
+
+
+/* REPORT */
+
+
+.status-box {
+
+  padding:
+    12px;
+
+  margin:
+    12px 0;
+
+  background:
+    #fafafa;
+
+  border:
+    1px dashed
+    var(--border);
+
+  border-radius:
+    10px;
+}
+
+
+.message {
+
+  min-height:
+    20px;
+}
+
+
+/* HELPERS */
+
+
+.hidden {
+
+  display:
+    none !important;
+}
+
+
+/* MOBILE */
+
+
+@media
+(max-width: 700px) {
+
+
+  .stage-grid,
+  .method-grid,
+  .metric-grid,
+  .two-column,
+  .class-button-grid {
+
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .stage-card {
+
+    min-height:
+      0;
+  }
+
+
+  .topbar {
+
+    align-items:
+      flex-start;
+  }
+
+
+  .bar-row {
+
+    grid-template-columns:
+      88px 1fr 60px;
+  }
+
+}
