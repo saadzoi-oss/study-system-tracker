@@ -394,6 +394,14 @@
   let completedCrosscheckSeconds =
     0;
 
+  /*
+    Used only when the student presses
+    "Start Anki Session" from the reminder.
+
+    They still choose one of their saved
+    classes before the Anki timer begins.
+  */
+
   let pendingAnkiLaunch =
     false;
 
@@ -519,7 +527,7 @@
 
 
   // ==========================================
-  // ANKI REMINDER SYSTEM
+  // ANKI REMINDER HELPERS
   // Monday + Thursday
   // ==========================================
 
@@ -625,9 +633,6 @@
   }
 
 
-  // Only looks at the CURRENT WEEK.
-  // Old missed sessions do not accumulate forever.
-
   function getOutstandingAnkiDays() {
 
     const today =
@@ -647,14 +652,14 @@
       );
 
 
-    const day =
+    const currentDay =
       today.getDay();
 
 
     const daysSinceMonday =
-      day === 0
+      currentDay === 0
         ? 6
-        : day - 1;
+        : currentDay - 1;
 
 
     monday.setDate(
@@ -734,7 +739,12 @@
     }
 
 
-    // Clears oldest outstanding requirement first.
+    /*
+      One completed Anki session clears
+      one outstanding required session.
+
+      Oldest requirement clears first.
+    */
 
     markAnkiDone(
       outstanding[0]
@@ -743,7 +753,7 @@
   }
 
 
-  function dayName(date) {
+  function getDayName(date) {
 
     return date.toLocaleDateString(
       undefined,
@@ -756,9 +766,9 @@
 
 
   // ==========================================
-  // BUILD ANKI REMINDER UI
-  // This is created by JavaScript, so you do
-  // NOT need to edit index.html for it.
+  // ANKI REMINDER UI
+  // Created automatically so index.html
+  // does not need to be changed.
   // ==========================================
 
   function createAnkiReminderCard() {
@@ -782,10 +792,8 @@
     card.id =
       "ankiReminderCard";
 
-
     card.className =
       "card hidden";
-
 
     card.style.marginBottom =
       "16px";
@@ -796,22 +804,17 @@
         "div"
       );
 
-
     label.textContent =
       "ANKI REMINDER";
-
 
     label.style.fontSize =
       "0.8rem";
 
-
     label.style.fontWeight =
       "700";
 
-
     label.style.opacity =
       "0.7";
-
 
     label.style.marginBottom =
       "6px";
@@ -822,20 +825,14 @@
         "h2"
       );
 
-
     title.id =
       "ankiReminderTitle";
-
-
-    title.style.marginBottom =
-      "8px";
 
 
     const text =
       document.createElement(
         "p"
       );
-
 
     text.id =
       "ankiReminderText";
@@ -846,14 +843,11 @@
         "div"
       );
 
-
     buttonRow.style.display =
       "flex";
 
-
     buttonRow.style.flexWrap =
       "wrap";
-
 
     buttonRow.style.gap =
       "10px";
@@ -864,18 +858,14 @@
         "button"
       );
 
-
     startButton.id =
       "ankiReminderStartBtn";
-
 
     startButton.type =
       "button";
 
-
     startButton.className =
       "primary";
-
 
     startButton.textContent =
       "Start Anki Session";
@@ -886,18 +876,14 @@
         "button"
       );
 
-
     dismissButton.id =
       "ankiReminderDismissBtn";
-
 
     dismissButton.type =
       "button";
 
-
     dismissButton.className =
       "secondary";
-
 
     dismissButton.textContent =
       "Hide for Today";
@@ -906,7 +892,6 @@
     buttonRow.appendChild(
       startButton
     );
-
 
     buttonRow.appendChild(
       dismissButton
@@ -917,21 +902,23 @@
       label
     );
 
-
     card.appendChild(
       title
     );
-
 
     card.appendChild(
       text
     );
 
-
     card.appendChild(
       buttonRow
     );
 
+
+    /*
+      Put reminder directly above
+      the saved-class choices.
+    */
 
     if (
       studyClassPanel &&
@@ -943,9 +930,7 @@
         studyClassPanel
       );
 
-    } else if (
-      studyScreen
-    ) {
+    } else {
 
       studyScreen.prepend(
         card
@@ -957,50 +942,39 @@
       "click",
       () => {
 
+        /*
+          Student must still choose one
+          of the classes they previously saved.
+        */
+
         pendingAnkiLaunch =
           true;
 
+        selectedClass =
+          null;
 
-        const classes =
-          getSavedClasses();
+        selectedStage =
+          null;
 
+        selectedMethod =
+          "";
 
-        if (
-          classes.length === 1
-        ) {
+        stagePanel.classList.add(
+          "hidden"
+        );
 
-          selectedClass =
-            classes[0];
+        methodPanel.classList.add(
+          "hidden"
+        );
 
+        studyClassPanel.classList.remove(
+          "hidden"
+        );
 
-          pendingAnkiLaunch =
-            false;
-
-
-          selectedStage =
-            3;
-
-
-          openTimer(
-            "Anki"
-          );
-
-
-          card.classList.add(
-            "hidden"
-          );
-
-
-          return;
-        }
-
-
-        showStudyHome();
-
+        renderStudyClassButtons();
 
         message.textContent =
           "Choose the class for your Anki session.";
-
       }
     );
 
@@ -1010,7 +984,6 @@
       () => {
 
         dismissAnkiForToday();
-
 
         card.classList.add(
           "hidden"
@@ -1022,20 +995,15 @@
 
   function renderAnkiReminder() {
 
-    createAnkiReminderCard();
-
-
     const card =
       document.getElementById(
         "ankiReminderCard"
       );
 
-
     const title =
       document.getElementById(
         "ankiReminderTitle"
       );
-
 
     const text =
       document.getElementById(
@@ -1056,6 +1024,20 @@
     card.classList.add(
       "hidden"
     );
+
+
+    /*
+      Never show reminder before
+      student has set up classes.
+    */
+
+    if (
+      getSavedClasses()
+        .length === 0
+    ) {
+
+      return;
+    }
 
 
     if (
@@ -1097,10 +1079,10 @@
 
       text.textContent =
         "Today is " +
-        dayName(
+        getDayName(
           requirement.date
         ) +
-        ". Complete one Anki review session.";
+        ". Complete one Anki session.";
 
     } else {
 
@@ -1110,7 +1092,7 @@
 
       text.textContent =
         "You missed your " +
-        dayName(
+        getDayName(
           requirement.date
         ) +
         " Anki session. Complete one session when you can.";
@@ -1558,6 +1540,7 @@
           subject
         );
 
+
         button.addEventListener(
           "click",
           () => {
@@ -1566,6 +1549,13 @@
               course;
 
 
+            /*
+              If student arrived here from
+              the Anki reminder, selecting
+              their class immediately opens
+              Stage 3 → Anki.
+            */
+
             if (
               pendingAnkiLaunch
             ) {
@@ -1573,15 +1563,12 @@
               pendingAnkiLaunch =
                 false;
 
-
               selectedStage =
                 3;
-
 
               openTimer(
                 "Anki"
               );
-
 
               return;
             }
@@ -1590,6 +1577,7 @@
             openStageSelection();
           }
         );
+
 
         studyClassButtons.appendChild(
           button
@@ -1639,6 +1627,12 @@
       selectedClass =
         null;
 
+      selectedStage =
+        null;
+
+      pendingAnkiLaunch =
+        false;
+
       stagePanel.classList.add(
         "hidden"
       );
@@ -1650,6 +1644,8 @@
       studyClassPanel.classList.remove(
         "hidden"
       );
+
+      renderAnkiReminder();
     }
   );
 
@@ -1809,11 +1805,15 @@
     pauseBtn.textContent =
       "Pause";
 
+    studyClassPanel.classList.add(
+      "hidden"
+    );
+
     stagePanel.classList.add(
       "hidden"
     );
 
-    studyClassPanel.classList.add(
+    methodPanel.classList.add(
       "hidden"
     );
 
@@ -1822,17 +1822,17 @@
     );
 
 
-    const ankiCard =
+    const ankiReminderCard =
       document.getElementById(
         "ankiReminderCard"
       );
 
 
     if (
-      ankiCard
+      ankiReminderCard
     ) {
 
-      ankiCard.classList.add(
+      ankiReminderCard.classList.add(
         "hidden"
       );
     }
@@ -2208,10 +2208,17 @@
     );
 
 
-    // Any completed Stage 3 Anki session clears
-    // the oldest outstanding Monday/Thursday
-    // requirement, whether the student entered
-    // through the reminder or selected Anki manually.
+    /*
+      IMPORTANT:
+
+      Completing Stage 3 → Anki clears
+      one outstanding Monday/Thursday
+      Anki requirement.
+
+      This works whether Anki was started
+      from the reminder OR selected manually
+      through the normal Stage 3 menu.
+    */
 
     if (
       selectedStage === 3 &&
@@ -2288,7 +2295,14 @@
       selectedMethod =
         "";
 
+      pendingAnkiLaunch =
+        false;
+
       stagePanel.classList.add(
+        "hidden"
+      );
+
+      methodPanel.classList.add(
         "hidden"
       );
 
@@ -2296,11 +2310,12 @@
         "hidden"
       );
 
-      message.textContent =
-        "Study session saved.";
-
+      renderStudyClassButtons();
 
       renderAnkiReminder();
+
+      message.textContent =
+        "Study session saved.";
     }
   );
 
@@ -2928,7 +2943,6 @@
 
   // ==========================================
   // WEEKLY SUBMISSION
-  // KEEPING YOUR EXISTING ENDPOINT
   // ==========================================
 
   function updateSubmissionStatus(
@@ -3147,6 +3161,9 @@
 
   function showClassManager() {
 
+    pendingAnkiLaunch =
+      false;
+
     progressScreen.classList.add(
       "hidden"
     );
@@ -3185,6 +3202,10 @@
     );
 
     stagePanel.classList.add(
+      "hidden"
+    );
+
+    methodPanel.classList.add(
       "hidden"
     );
 
@@ -3229,6 +3250,18 @@
     const classes =
       getSavedClasses();
 
+
+    /*
+      FIRST VISIT:
+
+      No saved classes means student
+      MUST set up classes first.
+
+      FUTURE VISITS:
+
+      Saved classes exist, so app
+      goes directly to Study Home.
+    */
 
     if (
       classes.length === 0
