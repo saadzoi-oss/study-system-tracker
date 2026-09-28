@@ -1,5 +1,7 @@
 (() => {
   "use strict";
+  if (window.__studySystemTrackerBooted) return;
+  window.__studySystemTrackerBooted = true;
   const $ = id => document.getElementById(id);
   const CLASS_KEY = "studySystem.classes.v2";
   const SESSION_KEY = "studySystem.sessions.v2";
@@ -34,6 +36,8 @@
     catch { return fallback; }
   };
   const classes = () => {
+    // Existing students use v2. Read an experimental v3 list only when v2 is absent.
+    // The next class edit copies that list into v2, which remains the active key.
     const key = localStorage.getItem(CLASS_KEY) === null ? "studySystem.classes.v3" : CLASS_KEY;
     const value = read(key, []);
     return Array.isArray(value) ? value : [];
@@ -123,6 +127,7 @@
     list.innerHTML = "";
     const saved = classes();
     visible("savedClassesPanel", saved.length > 0);
+    visible("homeBtn", saved.length > 0);
     saved.forEach((course, index) => {
       const row = document.createElement("div");
       row.className = "saved-class-row";
@@ -193,6 +198,18 @@
     showHome();
   });
   $("editClassesBtn").addEventListener("click", showClassManager);
+  $("navStudyBtn").addEventListener("click", () => {
+    $("classChooserCard").scrollIntoView?.({ behavior: "smooth", block: "start" });
+    $("studyClassButtons").querySelector("button")?.focus();
+  });
+  $("homeBtn").addEventListener("click", () => {
+    if (!$("timerPanel").classList.contains("hidden") ||
+        !$("crosscheckPanel").classList.contains("hidden")) {
+      message("Cancel or finish this stage before going Home.");
+      return;
+    }
+    classes().length ? showHome() : showClassManager();
+  });
 
   function showClassManager() {
     pendingAnki = false;
@@ -210,6 +227,7 @@
     visible("classManagerScreen", false);
     visible("progressScreen", false);
     visible("studyScreen", true);
+    visible("homeBtn", true);
     visible("studyClassPanel", true);
     ["stagePanel", "methodPanel", "timerPanel", "crosscheckPanel", "completePanel"]
       .forEach(id => visible(id, false));
@@ -306,6 +324,7 @@
     visible("stagePanel", false);
     visible("completePanel", false);
     visible("timerPanel", true);
+    message("");
   }
   $("startBtn").addEventListener("click", () => {
     startedAt = Date.now();
@@ -326,7 +345,13 @@
   });
   $("finishBtn").addEventListener("click", () => {
     stopStudyTimer();
+    if (elapsed < 30) {
+      $("pauseBtn").textContent = "Resume";
+      message("Study for at least 30 seconds, or Cancel without saving.");
+      return;
+    }
     studySeconds = Math.floor(elapsed);
+    message("");
     visible("timerPanel", false);
     if (selectedStage === 2) {
       crossElapsed = 0;
@@ -341,6 +366,13 @@
       crosscheckSeconds = 0;
       saveStage();
     }
+  });
+  $("cancelBtn").addEventListener("click", () => {
+    stopStudyTimer();
+    elapsed = 0;
+    visible("timerPanel", false);
+    openStages();
+    message("Canceled. No stage was saved.");
   });
   $("crosscheckStartBtn").addEventListener("click", () => {
     crossStartedAt = Date.now();
@@ -361,9 +393,22 @@
   });
   $("crosscheckFinishBtn").addEventListener("click", () => {
     stopCrossTimer();
+    if (crossElapsed < 15) {
+      $("crosscheckPauseBtn").textContent = "Resume";
+      message("Crosscheck for at least 15 seconds, or Cancel Stage without saving.");
+      return;
+    }
     crosscheckSeconds = Math.floor(crossElapsed);
+    message("");
     visible("crosscheckPanel", false);
     saveStage();
+  });
+  $("crosscheckCancelBtn").addEventListener("click", () => {
+    stopCrossTimer();
+    crossElapsed = 0;
+    visible("crosscheckPanel", false);
+    openStages();
+    message("Canceled. No stage was saved.");
   });
   function saveStage() {
     const record = {
@@ -448,6 +493,7 @@
     visible("classManagerScreen", false);
     visible("studyScreen", false);
     visible("progressScreen", true);
+    visible("homeBtn", classes().length > 0);
     $("weeklyTotal").textContent = human(summary.totalSeconds);
     $("weeklyStages").textContent = summary.stageCount;
     $("weeklyDays").textContent = summary.studyDays;
@@ -475,11 +521,12 @@
       });
     renderRanking("classBreakdown", summary.classes);
     renderRanking("methodBreakdown", summary.methods);
-    const sent = read(SUBMIT_KEY, {})[summary.weekStart];
-    $("submissionStatus").textContent = sent
-      ? "This week's summary was last shared on " + new Date(sent).toLocaleString() + "."
-      : "This week has not been shared yet.";
-    $("submitWeekBtn").textContent = sent ? "Update Weekly Summary" : "Share Weekly Summary";
+    const attempted = read(SUBMIT_KEY, {})[summary.weekStart];
+    $("submissionStatus").textContent = attempted
+      ? "Last submission attempt: " + new Date(attempted).toLocaleString() +
+        ". Delivery cannot be confirmed here; you can retry."
+      : "No submission attempt recorded this week.";
+    $("submitWeekBtn").textContent = attempted ? "Retry / Update Weekly Summary" : "Share Weekly Summary";
   }
   $("progressBtn").addEventListener("click", () => {
     if (!$("timerPanel").classList.contains("hidden") ||
@@ -493,6 +540,10 @@
   $("submitWeekBtn").addEventListener("click", () => {
     const endpoint = window.STUDY_TRACKER_WEEKLY_ENDPOINT;
     if (!endpoint) { $("submissionStatus").textContent = "Weekly reporting has not been configured yet."; return; }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      $("submissionStatus").textContent = "You appear to be offline. Connect and try again.";
+      return;
+    }
     const s = weeklySummary();
     if (!s.stageCount) { $("submissionStatus").textContent = "There is no study activity to share yet."; return; }
     let deviceId = localStorage.getItem(DEVICE_KEY);
@@ -520,13 +571,20 @@
       form.appendChild(input);
     });
     document.body.appendChild(form);
-    form.submit();
+    try {
+      form.submit();
+    } catch {
+      $("submissionStatus").textContent = "Submission could not be started. Try again.";
+      form.remove();
+      return;
+    }
     form.remove();
     const history = read(SUBMIT_KEY, {});
     history[s.weekStart] = new Date().toISOString();
     localStorage.setItem(SUBMIT_KEY, JSON.stringify(history));
-    $("submissionStatus").textContent = "Weekly summary sent anonymously.";
-    $("submitWeekBtn").textContent = "Update Weekly Summary";
+    $("submissionStatus").textContent =
+      "Submission attempted. Delivery cannot be confirmed here; ask your teacher or retry.";
+    $("submitWeekBtn").textContent = "Retry / Update Weekly Summary";
   });
 
   classes().length ? showHome() : showClassManager();
