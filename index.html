@@ -50,10 +50,8 @@
         <div id="navigationScreen" class="card" aria-label="Navigation">
           <div class="eyebrow">STUDY HOME</div>
           <h2>Where do you want to go?</h2>
+          <p class="muted">Choose a saved class below to study, or open another section.</p>
           <div class="nav-grid">
-            <button id="navStudyBtn" class="nav-button" type="button">
-              <strong>Study a Class</strong><span>Choose a saved class, stage, and method.</span>
-            </button>
             <button id="editClassesBtn" class="nav-button" type="button">
               <strong>Edit Classes</strong><span>Add or remove classes.</span>
             </button>
@@ -110,11 +108,12 @@
         <div id="timerMethod" class="method-name"></div>
         <p id="timerInstruction" class="muted"></p>
         <div id="timerDisplay" class="timer">00:00</div>
+        <p id="timerNotice" class="timer-notice" role="status" aria-live="polite"></p>
         <div class="actions">
           <button id="startBtn" class="primary" type="button">Start</button>
           <button id="pauseBtn" class="secondary hidden" type="button">Pause</button>
           <button id="finishBtn" class="secondary hidden" type="button">Finish</button>
-          <button id="cancelBtn" class="secondary" type="button">Cancel</button>
+          <button id="cancelBtn" class="secondary" type="button">Discard Stage</button>
         </div>
       </div>
 
@@ -123,12 +122,14 @@
         <h2>Crosscheck</h2>
         <p>Compare what you taught or produced with your notes, textbook, or other course materials.</p>
         <div id="crosscheckDisplay" class="timer">00:00</div>
+        <p id="crosscheckNotice" class="timer-notice" role="status" aria-live="polite"></p>
         <div class="actions">
           <button id="crosscheckStartBtn" class="primary" type="button">Start Crosscheck</button>
           <button id="crosscheckPauseBtn" class="secondary hidden" type="button">Pause</button>
           <button id="crosscheckFinishBtn" class="secondary hidden" type="button">Finish Crosscheck</button>
-          <button id="crosscheckCancelBtn" class="secondary" type="button">Cancel Stage</button>
+          <button id="crosscheckCancelBtn" class="secondary" type="button">Discard Verify Session</button>
         </div>
+        <p class="muted small-note field">Discarding also removes the Verify time. Finish the crosscheck to save both.</p>
       </div>
 
       <div id="completePanel" class="card hidden">
