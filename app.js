@@ -1,11 +1,28 @@
 (() => {
 
-  const CLASS_STORAGE_KEY = "studySystem.classes.v2";
-  const SESSION_STORAGE_KEY = "studySystem.sessions.v2";
-  const DEVICE_ID_KEY = "studySystem.deviceId.v2";
-  const SUBMISSION_STORAGE_KEY = "studySystem.weeklySubmissions.v2";
+  // ==========================================
+  // STORAGE
+  // ==========================================
+
+  const CLASS_STORAGE_KEY =
+    "studySystem.classes.v2";
+
+  const SESSION_STORAGE_KEY =
+    "studySystem.sessions.v2";
+
+  const DEVICE_ID_KEY =
+    "studySystem.deviceId.v2";
+
+  const SUBMISSION_STORAGE_KEY =
+    "studySystem.weeklySubmissions.v2";
+
+
+  // ==========================================
+  // COURSE CATALOG
+  // ==========================================
 
   const courseCatalog = {
+
     "Math": [
       "Algebra 1",
       "Geometry",
@@ -93,38 +110,59 @@
     ]
   };
 
+
+  // ==========================================
+  // STUDY SYSTEM STAGES
+  // ==========================================
+
   const stages = {
+
     1: {
       name: "Learn",
-      purpose: "Build or rebuild your understanding using your learning materials.",
-      instruction: "Use your notes, textbook, examples, videos, AI, or other learning resources to understand the material.",
+
+      purpose:
+        "Build or rebuild your understanding using your learning materials.",
+
+      instruction:
+        "Use your notes, textbook, examples, videos, AI, Unit Coach, or other learning resources to understand the material.",
+
       methods: [
         "Study / Review",
         "Textbook",
         "Video",
         "Concept Map",
         "Worked Examples",
-        "AI Tutor"
+        "AI Tutor",
+        "Unit Coach"
       ]
     },
 
     2: {
       name: "Verify",
-      purpose: "See what you can teach or produce from memory.",
-      instruction: "Put your materials away. Do not check your notes yet. First show yourself what you actually know.",
+
+      purpose:
+        "See what you can teach or produce from memory.",
+
+      instruction:
+        "Put your materials away. Do not check your notes yet. First show yourself what you actually know.",
+
       methods: [
         "Teach",
         "Redo Notes from Memory",
         "Concept Map from Memory",
-        "Brain Dump",
         "AI — Teach & Check"
       ]
     },
 
     3: {
       name: "Assess",
-      purpose: "Test what you can do independently without help.",
-      instruction: "Treat this like a real assessment. Avoid hints or explanations until the activity is finished.",
+
+      purpose:
+        "Test what you can do independently without help.",
+
+      instruction:
+        "Treat this like a real assessment. Avoid hints or explanations until the activity is finished.",
+
       methods: [
         "Homework as Test",
         "Practice Test",
@@ -134,148 +172,331 @@
         "AI Game"
       ]
     }
+
   };
 
-  const $ = id => document.getElementById(id);
 
-  const classManagerScreen = $("classManagerScreen");
-  const subjectSelect = $("subjectSelect");
-  const courseSelect = $("courseSelect");
-  const courseSelectWrap = $("courseSelectWrap");
-  const customCourseWrap = $("customCourseWrap");
-  const customCourse = $("customCourse");
-  const addClassBtn = $("addClassBtn");
-  const savedClassesPanel = $("savedClassesPanel");
-  const savedClassesList = $("savedClassesList");
-  const addAnotherClassBtn = $("addAnotherClassBtn");
-  const doneAddingClassesBtn = $("doneAddingClassesBtn");
+  // ==========================================
+  // ELEMENTS
+  // ==========================================
 
-  const studyScreen = $("studyScreen");
-  const studyClassPanel = $("studyClassPanel");
-  const studyClassButtons = $("studyClassButtons");
-  const editClassesBtn = $("editClassesBtn");
-  const stagePanel = $("stagePanel");
-  const selectedClassName = $("selectedClassName");
-  const changeClassBtn = $("changeClassBtn");
+  const $ =
+    id =>
+      document.getElementById(id);
 
-  const methodPanel = $("methodPanel");
-  const methodTitle = $("methodTitle");
-  const methodPurpose = $("methodPurpose");
-  const methodButtons = $("methodButtons");
 
-  const timerPanel = $("timerPanel");
-  const timerClass = $("timerClass");
-  const timerStage = $("timerStage");
-  const timerMethod = $("timerMethod");
-  const timerInstruction = $("timerInstruction");
-  const timerDisplay = $("timerDisplay");
-  const startBtn = $("startBtn");
-  const pauseBtn = $("pauseBtn");
-  const finishBtn = $("finishBtn");
+  const classManagerScreen =
+    $("classManagerScreen");
 
-  const crosscheckPanel = $("crosscheckPanel");
-  const crosscheckDisplay = $("crosscheckDisplay");
-  const crosscheckStartBtn = $("crosscheckStartBtn");
-  const crosscheckPauseBtn = $("crosscheckPauseBtn");
-  const crosscheckFinishBtn = $("crosscheckFinishBtn");
+  const subjectSelect =
+    $("subjectSelect");
 
-  const completePanel = $("completePanel");
-  const completeTitle = $("completeTitle");
-  const completeDetails = $("completeDetails");
-  const anotherStageBtn = $("anotherStageBtn");
-  const finishStudyingBtn = $("finishStudyingBtn");
+  const courseSelect =
+    $("courseSelect");
 
-  const progressScreen = $("progressScreen");
-  const progressBtn = $("progressBtn");
-  const backBtn = $("backBtn");
-  const weeklyTotal = $("weeklyTotal");
-  const weeklyStages = $("weeklyStages");
-  const weeklyDays = $("weeklyDays");
-  const stageBreakdown = $("stageBreakdown");
-  const classBreakdown = $("classBreakdown");
-  const methodBreakdown = $("methodBreakdown");
-  const submitWeekBtn = $("submitWeekBtn");
-  const submissionStatus = $("submissionStatus");
-  const message = $("message");
+  const courseSelectWrap =
+    $("courseSelectWrap");
 
-  let selectedClass = null;
-  let selectedStage = null;
-  let selectedMethod = "";
+  const customCourseWrap =
+    $("customCourseWrap");
 
-  let elapsedSeconds = 0;
-  let timerStartedAt = null;
-  let timerInterval = null;
+  const customCourse =
+    $("customCourse");
 
-  let crosscheckElapsed = 0;
-  let crosscheckStartedAt = null;
-  let crosscheckInterval = null;
+  const addClassBtn =
+    $("addClassBtn");
 
-  let completedStudySeconds = 0;
-  let completedCrosscheckSeconds = 0;
+  const savedClassesPanel =
+    $("savedClassesPanel");
+
+  const savedClassesList =
+    $("savedClassesList");
+
+  const addAnotherClassBtn =
+    $("addAnotherClassBtn");
+
+  const doneAddingClassesBtn =
+    $("doneAddingClassesBtn");
+
+
+  const studyScreen =
+    $("studyScreen");
+
+  const studyClassPanel =
+    $("studyClassPanel");
+
+  const studyClassButtons =
+    $("studyClassButtons");
+
+  const editClassesBtn =
+    $("editClassesBtn");
+
+  const stagePanel =
+    $("stagePanel");
+
+  const selectedClassName =
+    $("selectedClassName");
+
+  const changeClassBtn =
+    $("changeClassBtn");
+
+
+  const methodPanel =
+    $("methodPanel");
+
+  const methodTitle =
+    $("methodTitle");
+
+  const methodPurpose =
+    $("methodPurpose");
+
+  const methodButtons =
+    $("methodButtons");
+
+
+  const timerPanel =
+    $("timerPanel");
+
+  const timerClass =
+    $("timerClass");
+
+  const timerStage =
+    $("timerStage");
+
+  const timerMethod =
+    $("timerMethod");
+
+  const timerInstruction =
+    $("timerInstruction");
+
+  const timerDisplay =
+    $("timerDisplay");
+
+  const startBtn =
+    $("startBtn");
+
+  const pauseBtn =
+    $("pauseBtn");
+
+  const finishBtn =
+    $("finishBtn");
+
+
+  const crosscheckPanel =
+    $("crosscheckPanel");
+
+  const crosscheckDisplay =
+    $("crosscheckDisplay");
+
+  const crosscheckStartBtn =
+    $("crosscheckStartBtn");
+
+  const crosscheckPauseBtn =
+    $("crosscheckPauseBtn");
+
+  const crosscheckFinishBtn =
+    $("crosscheckFinishBtn");
+
+
+  const completePanel =
+    $("completePanel");
+
+  const completeTitle =
+    $("completeTitle");
+
+  const completeDetails =
+    $("completeDetails");
+
+  const anotherStageBtn =
+    $("anotherStageBtn");
+
+  const finishStudyingBtn =
+    $("finishStudyingBtn");
+
+
+  const progressScreen =
+    $("progressScreen");
+
+  const progressBtn =
+    $("progressBtn");
+
+  const backBtn =
+    $("backBtn");
+
+  const weeklyTotal =
+    $("weeklyTotal");
+
+  const weeklyStages =
+    $("weeklyStages");
+
+  const weeklyDays =
+    $("weeklyDays");
+
+  const stageBreakdown =
+    $("stageBreakdown");
+
+  const classBreakdown =
+    $("classBreakdown");
+
+  const methodBreakdown =
+    $("methodBreakdown");
+
+  const submitWeekBtn =
+    $("submitWeekBtn");
+
+  const submissionStatus =
+    $("submissionStatus");
+
+  const message =
+    $("message");
+
+
+  // ==========================================
+  // STATE
+  // ==========================================
+
+  let selectedClass =
+    null;
+
+  let selectedStage =
+    null;
+
+  let selectedMethod =
+    "";
+
+  let elapsedSeconds =
+    0;
+
+  let timerStartedAt =
+    null;
+
+  let timerInterval =
+    null;
+
+  let crosscheckElapsed =
+    0;
+
+  let crosscheckStartedAt =
+    null;
+
+  let crosscheckInterval =
+    null;
+
+  let completedStudySeconds =
+    0;
+
+  let completedCrosscheckSeconds =
+    0;
+
+
+  // ==========================================
+  // LOCAL STORAGE
+  // ==========================================
 
   function getSavedClasses() {
+
     try {
+
       return JSON.parse(
-        localStorage.getItem(CLASS_STORAGE_KEY) || "[]"
+        localStorage.getItem(
+          CLASS_STORAGE_KEY
+        ) || "[]"
       );
+
     } catch {
+
       return [];
     }
   }
 
+
   function saveClassList(classes) {
+
     localStorage.setItem(
       CLASS_STORAGE_KEY,
       JSON.stringify(classes)
     );
   }
 
+
   function getSessions() {
+
     try {
+
       return JSON.parse(
-        localStorage.getItem(SESSION_STORAGE_KEY) || "[]"
+        localStorage.getItem(
+          SESSION_STORAGE_KEY
+        ) || "[]"
       );
+
     } catch {
+
       return [];
     }
   }
 
+
   function saveSessions(rows) {
+
     localStorage.setItem(
       SESSION_STORAGE_KEY,
       JSON.stringify(rows)
     );
   }
 
+
   function getSubmissionHistory() {
+
     try {
+
       return JSON.parse(
-        localStorage.getItem(SUBMISSION_STORAGE_KEY) || "{}"
+        localStorage.getItem(
+          SUBMISSION_STORAGE_KEY
+        ) || "{}"
       );
+
     } catch {
+
       return {};
     }
   }
 
+
   function saveSubmissionHistory(history) {
+
     localStorage.setItem(
       SUBMISSION_STORAGE_KEY,
       JSON.stringify(history)
     );
   }
 
+
   function getDeviceId() {
-    let id = localStorage.getItem(DEVICE_ID_KEY);
+
+    let id =
+      localStorage.getItem(
+        DEVICE_ID_KEY
+      );
 
     if (!id) {
-      if (window.crypto && crypto.randomUUID) {
-        id = crypto.randomUUID();
+
+      if (
+        window.crypto &&
+        crypto.randomUUID
+      ) {
+
+        id =
+          crypto.randomUUID();
+
       } else {
+
         id =
           "device-" +
           Date.now() +
           "-" +
-          Math.random().toString(36).slice(2);
+          Math.random()
+            .toString(36)
+            .slice(2);
       }
 
       localStorage.setItem(
@@ -287,18 +508,29 @@
     return id;
   }
 
+
+  // ==========================================
+  // CLASS SETUP
+  // ==========================================
+
   subjectSelect.addEventListener(
     "change",
     () => {
-      populateCourses(subjectSelect.value);
+
+      populateCourses(
+        subjectSelect.value
+      );
     }
   );
 
+
   function populateCourses(subject) {
+
     courseSelect.innerHTML =
       '<option value="">Select class</option>';
 
-    customCourse.value = "";
+    customCourse.value =
+      "";
 
     customCourseWrap.classList.add(
       "hidden"
@@ -309,37 +541,52 @@
     );
 
     if (!subject) {
+
       courseSelectWrap.classList.add(
         "hidden"
       );
+
       return;
     }
 
     const courses =
       courseCatalog[subject] || [];
 
-    courses.forEach(course => {
-      const option =
-        document.createElement("option");
+    courses.forEach(
+      course => {
 
-      option.value = course;
-      option.textContent = course;
+        const option =
+          document.createElement(
+            "option"
+          );
 
-      courseSelect.appendChild(option);
-    });
+        option.value =
+          course;
+
+        option.textContent =
+          course;
+
+        courseSelect.appendChild(
+          option
+        );
+      }
+    );
 
     courseSelectWrap.classList.remove(
       "hidden"
     );
   }
 
+
   courseSelect.addEventListener(
     "change",
     () => {
+
       const selected =
         courseSelect.value;
 
       if (!selected) {
+
         customCourseWrap.classList.add(
           "hidden"
         );
@@ -351,11 +598,18 @@
         return;
       }
 
-      if (selected.startsWith("Other")) {
+      if (
+        selected.startsWith(
+          "Other"
+        )
+      ) {
+
         customCourseWrap.classList.remove(
           "hidden"
         );
+
       } else {
+
         customCourseWrap.classList.add(
           "hidden"
         );
@@ -367,23 +621,35 @@
     }
   );
 
+
   addClassBtn.addEventListener(
     "click",
     () => {
+
       const subject =
         subjectSelect.value;
 
       let className =
         courseSelect.value;
 
-      if (className.startsWith("Other")) {
+      if (
+        className.startsWith(
+          "Other"
+        )
+      ) {
+
         className =
           customCourse.value.trim();
       }
 
-      if (!subject || !className) {
+      if (
+        !subject ||
+        !className
+      ) {
+
         message.textContent =
           "Choose a subject and class.";
+
         return;
       }
 
@@ -393,17 +659,25 @@
       const exists =
         classes.some(
           course =>
-            course.name.toLowerCase() ===
-            className.toLowerCase()
+            course.name
+              .toLowerCase() ===
+            className
+              .toLowerCase()
         );
 
       if (!exists) {
+
         classes.push({
-          name: className,
-          subject: subject
+          name:
+            className,
+
+          subject:
+            subject
         });
 
-        saveClassList(classes);
+        saveClassList(
+          classes
+        );
       }
 
       renderSavedClasses();
@@ -414,12 +688,16 @@
 
       resetClassForm();
 
-      message.textContent = "";
+      message.textContent =
+        "";
     }
   );
 
+
   function resetClassForm() {
-    subjectSelect.value = "";
+
+    subjectSelect.value =
+      "";
 
     courseSelect.innerHTML =
       '<option value="">Select class</option>';
@@ -432,23 +710,31 @@
       "hidden"
     );
 
-    customCourse.value = "";
+    customCourse.value =
+      "";
 
     addClassBtn.classList.add(
       "hidden"
     );
   }
 
+
   function renderSavedClasses() {
+
     const classes =
       getSavedClasses();
 
-    savedClassesList.innerHTML = "";
+    savedClassesList.innerHTML =
+      "";
 
-    if (classes.length === 0) {
+    if (
+      classes.length === 0
+    ) {
+
       savedClassesPanel.classList.add(
         "hidden"
       );
+
       return;
     }
 
@@ -458,20 +744,27 @@
 
     classes.forEach(
       (course, index) => {
+
         const row =
-          document.createElement("div");
+          document.createElement(
+            "div"
+          );
 
         row.className =
           "saved-class-row";
 
         const info =
-          document.createElement("div");
+          document.createElement(
+            "div"
+          );
 
         info.className =
           "saved-class-info";
 
         const name =
-          document.createElement("span");
+          document.createElement(
+            "span"
+          );
 
         name.className =
           "saved-class-name";
@@ -480,7 +773,9 @@
           course.name;
 
         const subject =
-          document.createElement("span");
+          document.createElement(
+            "span"
+          );
 
         subject.className =
           "saved-class-subject";
@@ -488,11 +783,18 @@
         subject.textContent =
           course.subject;
 
-        info.appendChild(name);
-        info.appendChild(subject);
+        info.appendChild(
+          name
+        );
+
+        info.appendChild(
+          subject
+        );
 
         const removeButton =
-          document.createElement("button");
+          document.createElement(
+            "button"
+          );
 
         removeButton.type =
           "button";
@@ -506,12 +808,20 @@
         removeButton.addEventListener(
           "click",
           () => {
-            removeClass(index);
+
+            removeClass(
+              index
+            );
           }
         );
 
-        row.appendChild(info);
-        row.appendChild(removeButton);
+        row.appendChild(
+          info
+        );
+
+        row.appendChild(
+          removeButton
+        );
 
         savedClassesList.appendChild(
           row
@@ -520,21 +830,31 @@
     );
   }
 
+
   function removeClass(index) {
+
     const classes =
       getSavedClasses();
 
-    classes.splice(index, 1);
+    classes.splice(
+      index,
+      1
+    );
 
-    saveClassList(classes);
+    saveClassList(
+      classes
+    );
 
     renderSavedClasses();
+
     renderStudyClassButtons();
   }
+
 
   addAnotherClassBtn.addEventListener(
     "click",
     () => {
+
       resetClassForm();
 
       window.scrollTo({
@@ -544,14 +864,19 @@
     }
   );
 
+
   doneAddingClassesBtn.addEventListener(
     "click",
     () => {
+
       if (
-        getSavedClasses().length === 0
+        getSavedClasses()
+          .length === 0
       ) {
+
         message.textContent =
           "Add at least one class first.";
+
         return;
       }
 
@@ -559,59 +884,87 @@
     }
   );
 
+
   editClassesBtn.addEventListener(
     "click",
     () => {
+
       showClassManager();
     }
   );
 
+
+  // ==========================================
+  // CLASS SELECTION FOR STUDY
+  // ==========================================
+
   function renderStudyClassButtons() {
+
     const classes =
       getSavedClasses();
 
-    studyClassButtons.innerHTML = "";
+    studyClassButtons.innerHTML =
+      "";
 
-    classes.forEach(course => {
-      const button =
-        document.createElement("button");
+    classes.forEach(
+      course => {
 
-      button.type =
-        "button";
+        const button =
+          document.createElement(
+            "button"
+          );
 
-      button.className =
-        "class-button";
+        button.type =
+          "button";
 
-      const name =
-        document.createElement("strong");
+        button.className =
+          "class-button";
 
-      name.textContent =
-        course.name;
+        const name =
+          document.createElement(
+            "strong"
+          );
 
-      const subject =
-        document.createElement("span");
+        name.textContent =
+          course.name;
 
-      subject.textContent =
-        course.subject;
+        const subject =
+          document.createElement(
+            "span"
+          );
 
-      button.appendChild(name);
-      button.appendChild(subject);
+        subject.textContent =
+          course.subject;
 
-      button.addEventListener(
-        "click",
-        () => {
-          selectedClass = course;
-          openStageSelection();
-        }
-      );
+        button.appendChild(
+          name
+        );
 
-      studyClassButtons.appendChild(
-        button
-      );
-    });
+        button.appendChild(
+          subject
+        );
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            selectedClass =
+              course;
+
+            openStageSelection();
+          }
+        );
+
+        studyClassButtons.appendChild(
+          button
+        );
+      }
+    );
   }
 
+
   function openStageSelection() {
+
     studyClassPanel.classList.add(
       "hidden"
     );
@@ -627,19 +980,28 @@
       "hidden"
     );
 
-    selectedStage = null;
+    selectedStage =
+      null;
 
     document
-      .querySelectorAll(".stage-card")
-      .forEach(card =>
-        card.classList.remove("selected")
+      .querySelectorAll(
+        ".stage-card"
+      )
+      .forEach(
+        card =>
+          card.classList.remove(
+            "selected"
+          )
       );
   }
+
 
   changeClassBtn.addEventListener(
     "click",
     () => {
-      selectedClass = null;
+
+      selectedClass =
+        null;
 
       stagePanel.classList.add(
         "hidden"
@@ -655,39 +1017,59 @@
     }
   );
 
+
+  // ==========================================
+  // STAGE SELECTION
+  // ==========================================
+
   document
-    .querySelectorAll(".stage-card")
-    .forEach(button => {
-      button.addEventListener(
-        "click",
-        () => {
-          selectedStage =
-            Number(
-              button.dataset.stage
-            );
+    .querySelectorAll(
+      ".stage-card"
+    )
+    .forEach(
+      button => {
 
-          document
-            .querySelectorAll(".stage-card")
-            .forEach(card =>
-              card.classList.remove(
-                "selected"
+        button.addEventListener(
+          "click",
+          () => {
+
+            selectedStage =
+              Number(
+                button.dataset.stage
+              );
+
+            document
+              .querySelectorAll(
+                ".stage-card"
               )
+              .forEach(
+                card =>
+                  card.classList.remove(
+                    "selected"
+                  )
+              );
+
+            button.classList.add(
+              "selected"
             );
 
-          button.classList.add(
-            "selected"
-          );
+            renderMethods(
+              selectedStage
+            );
+          }
+        );
+      }
+    );
 
-          renderMethods(
-            selectedStage
-          );
-        }
-      );
-    });
 
-  function renderMethods(stageNumber) {
+  function renderMethods(
+    stageNumber
+  ) {
+
     const stage =
-      stages[stageNumber];
+      stages[
+        stageNumber
+      ];
 
     methodTitle.textContent =
       "Stage " +
@@ -698,40 +1080,61 @@
     methodPurpose.textContent =
       stage.purpose;
 
-    methodButtons.innerHTML = "";
+    methodButtons.innerHTML =
+      "";
 
-    stage.methods.forEach(method => {
-      const button =
-        document.createElement("button");
+    stage.methods.forEach(
+      method => {
 
-      button.type =
-        "button";
+        const button =
+          document.createElement(
+            "button"
+          );
 
-      button.textContent =
-        method;
+        button.type =
+          "button";
 
-      button.addEventListener(
-        "click",
-        () => {
-          openTimer(method);
-        }
-      );
+        button.textContent =
+          method;
 
-      methodButtons.appendChild(
-        button
-      );
-    });
+        button.addEventListener(
+          "click",
+          () => {
+
+            openTimer(
+              method
+            );
+          }
+        );
+
+        methodButtons.appendChild(
+          button
+        );
+      }
+    );
 
     methodPanel.classList.remove(
       "hidden"
     );
   }
 
-  function openTimer(method) {
-    selectedMethod = method;
 
-    elapsedSeconds = 0;
-    timerStartedAt = null;
+  // ==========================================
+  // MAIN TIMER
+  // ==========================================
+
+  function openTimer(
+    method
+  ) {
+
+    selectedMethod =
+      method;
+
+    elapsedSeconds =
+      0;
+
+    timerStartedAt =
+      null;
 
     timerDisplay.textContent =
       "00:00";
@@ -743,14 +1146,17 @@
       "Stage " +
       selectedStage +
       " — " +
-      stages[selectedStage].name;
+      stages[
+        selectedStage
+      ].name;
 
     timerMethod.textContent =
       method;
 
     timerInstruction.textContent =
-      stages[selectedStage]
-        .instruction;
+      stages[
+        selectedStage
+      ].instruction;
 
     startBtn.classList.remove(
       "hidden"
@@ -776,11 +1182,16 @@
     );
   }
 
+
   function updateTimer() {
+
     let total =
       elapsedSeconds;
 
-    if (timerStartedAt) {
+    if (
+      timerStartedAt
+    ) {
+
       total +=
         (
           Date.now() -
@@ -789,31 +1200,48 @@
     }
 
     timerDisplay.textContent =
-      formatTimer(total);
+      formatTimer(
+        total
+      );
   }
 
+
   function stopTimer() {
-    if (timerStartedAt) {
+
+    if (
+      timerStartedAt
+    ) {
+
       elapsedSeconds +=
         (
           Date.now() -
           timerStartedAt
         ) / 1000;
 
-      timerStartedAt = null;
+      timerStartedAt =
+        null;
     }
 
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
+    if (
+      timerInterval
+    ) {
+
+      clearInterval(
+        timerInterval
+      );
+
+      timerInterval =
+        null;
     }
 
     updateTimer();
   }
 
+
   startBtn.addEventListener(
     "click",
     () => {
+
       timerStartedAt =
         Date.now();
 
@@ -837,14 +1265,22 @@
     }
   );
 
+
   pauseBtn.addEventListener(
     "click",
     () => {
-      if (timerStartedAt) {
+
+      if (
+        timerStartedAt
+      ) {
+
         stopTimer();
+
         pauseBtn.textContent =
           "Resume";
+
       } else {
+
         timerStartedAt =
           Date.now();
 
@@ -860,9 +1296,11 @@
     }
   );
 
+
   finishBtn.addEventListener(
     "click",
     () => {
+
       stopTimer();
 
       completedStudySeconds =
@@ -874,9 +1312,14 @@
         "hidden"
       );
 
-      if (selectedStage === 2) {
+      if (
+        selectedStage === 2
+      ) {
+
         prepareCrosscheck();
+
       } else {
+
         completedCrosscheckSeconds =
           0;
 
@@ -885,9 +1328,18 @@
     }
   );
 
+
+  // ==========================================
+  // CROSSCHECK
+  // ==========================================
+
   function prepareCrosscheck() {
-    crosscheckElapsed = 0;
-    crosscheckStartedAt = null;
+
+    crosscheckElapsed =
+      0;
+
+    crosscheckStartedAt =
+      null;
 
     crosscheckDisplay.textContent =
       "00:00";
@@ -912,11 +1364,16 @@
     );
   }
 
+
   function updateCrosscheckTimer() {
+
     let total =
       crosscheckElapsed;
 
-    if (crosscheckStartedAt) {
+    if (
+      crosscheckStartedAt
+    ) {
+
       total +=
         (
           Date.now() -
@@ -925,34 +1382,48 @@
     }
 
     crosscheckDisplay.textContent =
-      formatTimer(total);
+      formatTimer(
+        total
+      );
   }
 
+
   function stopCrosscheckTimer() {
-    if (crosscheckStartedAt) {
+
+    if (
+      crosscheckStartedAt
+    ) {
+
       crosscheckElapsed +=
         (
           Date.now() -
           crosscheckStartedAt
         ) / 1000;
 
-      crosscheckStartedAt = null;
+      crosscheckStartedAt =
+        null;
     }
 
-    if (crosscheckInterval) {
+    if (
+      crosscheckInterval
+    ) {
+
       clearInterval(
         crosscheckInterval
       );
 
-      crosscheckInterval = null;
+      crosscheckInterval =
+        null;
     }
 
     updateCrosscheckTimer();
   }
 
+
   crosscheckStartBtn.addEventListener(
     "click",
     () => {
+
       crosscheckStartedAt =
         Date.now();
 
@@ -976,15 +1447,22 @@
     }
   );
 
+
   crosscheckPauseBtn.addEventListener(
     "click",
     () => {
-      if (crosscheckStartedAt) {
+
+      if (
+        crosscheckStartedAt
+      ) {
+
         stopCrosscheckTimer();
 
         crosscheckPauseBtn.textContent =
           "Resume";
+
       } else {
+
         crosscheckStartedAt =
           Date.now();
 
@@ -1000,9 +1478,11 @@
     }
   );
 
+
   crosscheckFinishBtn.addEventListener(
     "click",
     () => {
+
       stopCrosscheckTimer();
 
       completedCrosscheckSeconds =
@@ -1018,10 +1498,18 @@
     }
   );
 
+
+  // ==========================================
+  // SAVE COMPLETED STAGE
+  // ==========================================
+
   function saveCompletedStage() {
+
     const record = {
+
       timestamp:
-        new Date().toISOString(),
+        new Date()
+          .toISOString(),
 
       className:
         selectedClass.name,
@@ -1033,7 +1521,9 @@
         selectedStage,
 
       stageName:
-        stages[selectedStage].name,
+        stages[
+          selectedStage
+        ].name,
 
       method:
         selectedMethod,
@@ -1049,19 +1539,28 @@
         completedCrosscheckSeconds
     };
 
+
     const rows =
       getSessions();
 
-    rows.push(record);
+    rows.push(
+      record
+    );
 
-    saveSessions(rows);
+    saveSessions(
+      rows
+    );
+
 
     completeTitle.textContent =
       "Stage " +
       selectedStage +
       " — " +
-      stages[selectedStage].name +
+      stages[
+        selectedStage
+      ].name +
       " complete";
+
 
     completeDetails.textContent =
       selectedMethod +
@@ -1078,14 +1577,21 @@
           : ""
       );
 
+
     completePanel.classList.remove(
       "hidden"
     );
   }
 
+
+  // ==========================================
+  // AFTER STAGE
+  // ==========================================
+
   anotherStageBtn.addEventListener(
     "click",
     () => {
+
       completePanel.classList.add(
         "hidden"
       );
@@ -1094,16 +1600,23 @@
     }
   );
 
+
   finishStudyingBtn.addEventListener(
     "click",
     () => {
+
       completePanel.classList.add(
         "hidden"
       );
 
-      selectedClass = null;
-      selectedStage = null;
-      selectedMethod = "";
+      selectedClass =
+        null;
+
+      selectedStage =
+        null;
+
+      selectedMethod =
+        "";
 
       stagePanel.classList.add(
         "hidden"
@@ -1118,44 +1631,86 @@
     }
   );
 
-  function formatTimer(seconds) {
+
+  // ==========================================
+  // TIME HELPERS
+  // ==========================================
+
+  function formatTimer(
+    seconds
+  ) {
+
     const total =
       Math.max(
         0,
-        Math.floor(seconds || 0)
+        Math.floor(
+          seconds || 0
+        )
       );
 
     const minutes =
-      Math.floor(total / 60);
+      Math.floor(
+        total / 60
+      );
 
     const secs =
       total % 60;
 
     return (
-      String(minutes).padStart(2, "0") +
+      String(
+        minutes
+      ).padStart(
+        2,
+        "0"
+      ) +
       ":" +
-      String(secs).padStart(2, "0")
+      String(
+        secs
+      ).padStart(
+        2,
+        "0"
+      )
     );
   }
 
-  function humanTime(seconds) {
+
+  function humanTime(
+    seconds
+  ) {
+
     const minutes =
       Math.round(
-        (seconds || 0) / 60
+        (
+          seconds || 0
+        ) / 60
       );
 
-    if (minutes < 60) {
-      return minutes + " min";
+    if (
+      minutes < 60
+    ) {
+
+      return (
+        minutes +
+        " min"
+      );
     }
 
     const hours =
-      Math.floor(minutes / 60);
+      Math.floor(
+        minutes / 60
+      );
 
     const remaining =
       minutes % 60;
 
-    if (remaining === 0) {
-      return hours + " hr";
+    if (
+      remaining === 0
+    ) {
+
+      return (
+        hours +
+        " hr"
+      );
     }
 
     return (
@@ -1166,17 +1721,29 @@
     );
   }
 
+
+  // ==========================================
+  // WEEK HELPERS
+  // ==========================================
+
   function getMonday(
     date = new Date()
   ) {
+
     const result =
-      new Date(date);
+      new Date(
+        date
+      );
 
     const day =
-      (result.getDay() + 6) % 7;
+      (
+        result.getDay() +
+        6
+      ) % 7;
 
     result.setDate(
-      result.getDate() - day
+      result.getDate() -
+      day
     );
 
     result.setHours(
@@ -1189,19 +1756,30 @@
     return result;
   }
 
-  function weekKey(date) {
+
+  function weekKey(
+    date
+  ) {
+
     const year =
       date.getFullYear();
 
     const month =
       String(
-        date.getMonth() + 1
-      ).padStart(2, "0");
+        date.getMonth() +
+        1
+      ).padStart(
+        2,
+        "0"
+      );
 
     const day =
       String(
         date.getDate()
-      ).padStart(2, "0");
+      ).padStart(
+        2,
+        "0"
+      );
 
     return (
       year +
@@ -1212,145 +1790,216 @@
     );
   }
 
+
+  // ==========================================
+  // WEEKLY SUMMARY
+  // ==========================================
+
   function createWeeklySummary() {
+
     const start =
       getMonday();
 
     const end =
-      new Date(start);
+      new Date(
+        start
+      );
 
     end.setDate(
-      end.getDate() + 7
+      end.getDate() +
+      7
     );
+
 
     const rows =
       getSessions()
-        .filter(row => {
-          const timestamp =
-            new Date(
-              row.timestamp
-            );
+        .filter(
+          row => {
 
-          return (
-            timestamp >= start &&
-            timestamp < end
-          );
-        });
+            const timestamp =
+              new Date(
+                row.timestamp
+              );
+
+            return (
+              timestamp >= start &&
+              timestamp < end
+            );
+          }
+        );
+
 
     const summary = {
-      weekStart:
-        weekKey(start),
 
-      totalSeconds: 0,
+      weekStart:
+        weekKey(
+          start
+        ),
+
+      totalSeconds:
+        0,
+
       stageCount:
         rows.length,
 
       studyDays:
         new Set(),
 
-      stage1Seconds: 0,
-      stage2Seconds: 0,
-      stage3Seconds: 0,
-      crosscheckSeconds: 0,
+      stage1Seconds:
+        0,
 
-      classes: {},
-      methods: {},
-      methodCounts: {}
+      stage2Seconds:
+        0,
+
+      stage3Seconds:
+        0,
+
+      crosscheckSeconds:
+        0,
+
+      classes:
+        {},
+
+      methods:
+        {},
+
+      methodCounts:
+        {}
     };
 
-    rows.forEach(row => {
-      summary.totalSeconds +=
-        row.totalSeconds || 0;
 
-      summary.studyDays.add(
-        row.timestamp.slice(0, 10)
-      );
+    rows.forEach(
+      row => {
 
-      if (row.stage === 1) {
-        summary.stage1Seconds +=
-          row.studySeconds || 0;
-      }
+        summary.totalSeconds +=
+          row.totalSeconds || 0;
 
-      if (row.stage === 2) {
-        summary.stage2Seconds +=
-          row.studySeconds || 0;
-      }
-
-      if (row.stage === 3) {
-        summary.stage3Seconds +=
-          row.studySeconds || 0;
-      }
-
-      summary.crosscheckSeconds +=
-        row.crosscheckSeconds || 0;
-
-      summary.classes[
-        row.className
-      ] =
-        (
-          summary.classes[
-            row.className
-          ] || 0
-        ) +
-        (
-          row.totalSeconds || 0
+        summary.studyDays.add(
+          row.timestamp.slice(
+            0,
+            10
+          )
         );
 
-      summary.methods[
-        row.method
-      ] =
-        (
-          summary.methods[
-            row.method
-          ] || 0
-        ) +
-        (
-          row.studySeconds || 0
-        );
 
-      summary.methodCounts[
-        row.method
-      ] =
-        (
-          summary.methodCounts[
-            row.method
-          ] || 0
-        ) + 1;
-    });
+        if (
+          row.stage === 1
+        ) {
+
+          summary.stage1Seconds +=
+            row.studySeconds || 0;
+        }
+
+
+        if (
+          row.stage === 2
+        ) {
+
+          summary.stage2Seconds +=
+            row.studySeconds || 0;
+        }
+
+
+        if (
+          row.stage === 3
+        ) {
+
+          summary.stage3Seconds +=
+            row.studySeconds || 0;
+        }
+
+
+        summary.crosscheckSeconds +=
+          row.crosscheckSeconds || 0;
+
+
+        summary.classes[
+          row.className
+        ] =
+          (
+            summary.classes[
+              row.className
+            ] || 0
+          ) +
+          (
+            row.totalSeconds || 0
+          );
+
+
+        summary.methods[
+          row.method
+        ] =
+          (
+            summary.methods[
+              row.method
+            ] || 0
+          ) +
+          (
+            row.studySeconds || 0
+          );
+
+
+        summary.methodCounts[
+          row.method
+        ] =
+          (
+            summary.methodCounts[
+              row.method
+            ] || 0
+          ) + 1;
+      }
+    );
+
 
     summary.studyDays =
       summary.studyDays.size;
 
+
     return summary;
   }
+
+
+  // ==========================================
+  // WEEKLY PROGRESS
+  // ==========================================
 
   progressBtn.addEventListener(
     "click",
     () => {
+
       showWeeklyProgress();
     }
   );
 
+
   backBtn.addEventListener(
     "click",
     () => {
+
       progressScreen.classList.add(
         "hidden"
       );
 
       if (
-        getSavedClasses().length === 0
+        getSavedClasses()
+          .length === 0
       ) {
+
         showClassManager();
+
       } else {
+
         showStudyHome();
       }
     }
   );
 
+
   function showWeeklyProgress() {
+
     const summary =
       createWeeklySummary();
+
 
     classManagerScreen.classList.add(
       "hidden"
@@ -1364,6 +2013,7 @@
       "hidden"
     );
 
+
     weeklyTotal.textContent =
       humanTime(
         summary.totalSeconds
@@ -1375,9 +2025,11 @@
     weeklyDays.textContent =
       summary.studyDays;
 
+
     renderStageBreakdown(
       summary
     );
+
 
     renderRanking(
       classBreakdown,
@@ -1385,111 +2037,174 @@
       true
     );
 
+
     renderRanking(
       methodBreakdown,
       summary.methods,
       true
     );
 
+
     updateSubmissionStatus(
       summary.weekStart
     );
   }
 
+
   function renderStageBreakdown(
     summary
   ) {
-    stageBreakdown.innerHTML = "";
+
+    stageBreakdown.innerHTML =
+      "";
+
 
     const rows = [
+
       {
-        name: "Learn",
+        name:
+          "Learn",
+
         seconds:
           summary.stage1Seconds,
-        css: "learn"
+
+        css:
+          "learn"
       },
+
       {
-        name: "Verify",
+        name:
+          "Verify",
+
         seconds:
           summary.stage2Seconds,
-        css: "verify"
+
+        css:
+          "verify"
       },
+
       {
-        name: "Assess",
+        name:
+          "Assess",
+
         seconds:
           summary.stage3Seconds,
-        css: "assess"
+
+        css:
+          "assess"
       },
+
       {
-        name: "Crosscheck",
+        name:
+          "Crosscheck",
+
         seconds:
           summary.crosscheckSeconds,
-        css: "crosscheck"
+
+        css:
+          "crosscheck"
       }
+
     ];
 
-    rows.forEach(item => {
-      const percent =
-        summary.totalSeconds
-          ? Math.round(
-              (
-                item.seconds /
-                summary.totalSeconds
-              ) * 100
-            )
-          : 0;
 
-      const row =
-        document.createElement(
-          "div"
+    rows.forEach(
+      item => {
+
+        const percent =
+          summary.totalSeconds
+            ? Math.round(
+                (
+                  item.seconds /
+                  summary.totalSeconds
+                ) *
+                100
+              )
+            : 0;
+
+
+        const row =
+          document.createElement(
+            "div"
+          );
+
+
+        row.className =
+          "bar-row";
+
+
+        row.innerHTML = `
+
+          <span>
+            ${item.name}
+          </span>
+
+          <div class="bar-track">
+
+            <div
+              class="bar-fill ${item.css}"
+              style="width:${percent}%"
+            ></div>
+
+          </div>
+
+          <strong>
+            ${percent}%
+          </strong>
+        `;
+
+
+        stageBreakdown.appendChild(
+          row
         );
-
-      row.className =
-        "bar-row";
-
-      row.innerHTML = `
-        <span>${item.name}</span>
-
-        <div class="bar-track">
-          <div
-            class="bar-fill ${item.css}"
-            style="width:${percent}%"
-          ></div>
-        </div>
-
-        <strong>
-          ${percent}%
-        </strong>
-      `;
-
-      stageBreakdown.appendChild(
-        row
-      );
-    });
+      }
+    );
   }
+
 
   function renderRanking(
     element,
     data,
     showTime
   ) {
-    element.innerHTML = "";
+
+    element.innerHTML =
+      "";
+
 
     const entries =
-      Object.entries(data)
-        .sort(
-          (a, b) =>
-            b[1] - a[1]
-        );
+      Object.entries(
+        data
+      )
+      .sort(
+        (
+          a,
+          b
+        ) =>
+          b[1] -
+          a[1]
+      );
 
-    if (entries.length === 0) {
+
+    if (
+      entries.length === 0
+    ) {
+
       element.innerHTML =
         '<span class="muted">No activity yet this week.</span>';
+
       return;
     }
 
+
     entries.forEach(
-      ([name, value]) => {
+      (
+        [
+          name,
+          value
+        ]
+      ) => {
+
         const row =
           document.createElement(
             "div"
@@ -1497,6 +2212,7 @@
 
         row.className =
           "list-row";
+
 
         const left =
           document.createElement(
@@ -1506,6 +2222,7 @@
         left.textContent =
           name;
 
+
         const right =
           document.createElement(
             "strong"
@@ -1513,34 +2230,61 @@
 
         right.textContent =
           showTime
-            ? humanTime(value)
+            ? humanTime(
+                value
+              )
             : value;
 
-        row.appendChild(left);
-        row.appendChild(right);
 
-        element.appendChild(row);
+        row.appendChild(
+          left
+        );
+
+        row.appendChild(
+          right
+        );
+
+
+        element.appendChild(
+          row
+        );
       }
     );
   }
 
+
+  // ==========================================
+  // WEEKLY SUBMISSION
+  // ==========================================
+
   function updateSubmissionStatus(
     week
   ) {
+
     const history =
       getSubmissionHistory();
 
-    if (history[week]) {
+
+    if (
+      history[
+        week
+      ]
+    ) {
+
       submissionStatus.textContent =
         "This week's summary was last shared on " +
         new Date(
-          history[week]
+          history[
+            week
+          ]
         ).toLocaleString() +
         ".";
 
       submitWeekBtn.textContent =
         "Update Weekly Summary";
+
     } else {
+
       submissionStatus.textContent =
         "This week has not been shared yet.";
 
@@ -1549,39 +2293,54 @@
     }
   }
 
+
   submitWeekBtn.addEventListener(
     "click",
     () => {
+
       submitWeeklySummary();
     }
   );
 
+
   function submitWeeklySummary() {
+
     const endpoint =
       window
         .STUDY_TRACKER_WEEKLY_ENDPOINT;
 
-    if (!endpoint) {
+
+    if (
+      !endpoint
+    ) {
+
       submissionStatus.textContent =
         "Weekly reporting has not been configured yet.";
+
       return;
     }
+
 
     const summary =
       createWeeklySummary();
 
+
     if (
       summary.stageCount === 0
     ) {
+
       submissionStatus.textContent =
         "There is no study activity to share yet.";
+
       return;
     }
+
 
     const form =
       document.createElement(
         "form"
       );
+
 
     form.method =
       "POST";
@@ -1595,7 +2354,9 @@
     form.className =
       "hidden";
 
+
     const payload = {
+
       action:
         "submitWeekly",
 
@@ -1637,39 +2398,53 @@
         )
     };
 
-    Object.entries(payload)
-      .forEach(
-        ([key, value]) => {
-          const input =
-            document.createElement(
-              "input"
-            );
 
-          input.type =
-            "hidden";
+    Object.entries(
+      payload
+    )
+    .forEach(
+      (
+        [
+          key,
+          value
+        ]
+      ) => {
 
-          input.name =
-            key;
-
-          input.value =
-            value;
-
-          form.appendChild(
-            input
+        const input =
+          document.createElement(
+            "input"
           );
-        }
-      );
+
+        input.type =
+          "hidden";
+
+        input.name =
+          key;
+
+        input.value =
+          value;
+
+        form.appendChild(
+          input
+        );
+      }
+    );
+
 
     document.body.appendChild(
       form
     );
 
+
     form.submit();
+
 
     form.remove();
 
+
     const history =
       getSubmissionHistory();
+
 
     history[
       summary.weekStart
@@ -1677,18 +2452,27 @@
       new Date()
         .toISOString();
 
+
     saveSubmissionHistory(
       history
     );
 
+
     submissionStatus.textContent =
       "Weekly summary sent anonymously.";
+
 
     submitWeekBtn.textContent =
       "Update Weekly Summary";
   }
 
+
+  // ==========================================
+  // SCREEN HELPERS
+  // ==========================================
+
   function showClassManager() {
+
     progressScreen.classList.add(
       "hidden"
     );
@@ -1701,11 +2485,15 @@
       "hidden"
     );
 
+
     renderSavedClasses();
+
     resetClassForm();
   }
 
+
   function showStudyHome() {
+
     classManagerScreen.classList.add(
       "hidden"
     );
@@ -1738,26 +2526,45 @@
       "hidden"
     );
 
-    selectedClass = null;
-    selectedStage = null;
-    selectedMethod = "";
+
+    selectedClass =
+      null;
+
+    selectedStage =
+      null;
+
+    selectedMethod =
+      "";
+
 
     renderStudyClassButtons();
   }
 
+
+  // ==========================================
+  // INITIALIZE
+  // ==========================================
+
   function initialize() {
+
     const classes =
       getSavedClasses();
+
 
     if (
       classes.length === 0
     ) {
+
       showClassManager();
+
     } else {
+
       showStudyHome();
     }
   }
 
+
   initialize();
+
 
 })();
