@@ -1,6 +1,3 @@
-Here is the complete app.js with the missing line restored (`row.appendChild(remove);` in `renderSavedClasses`). Nothing else changed.
-
-```javascript
 (() => {
   "use strict";
   if (window.__studySystemTrackerBooted) return;
@@ -682,6 +679,3 @@ Here is the complete app.js with the missing line restored (`row.appendChild(rem
 
   classes().length ? showHome() : showClassManager();
 })();
-```
-
-Deploy it with `?v=5` on all three tags in index.html.
