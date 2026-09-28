@@ -10,7 +10,6 @@
   const ANKI_PREF = "studyTracker.ankiReminderEnabled";
   const ANKI_DONE = "studyTracker.ankiDone.";
   const ANKI_HIDE = "studyTracker.ankiDismiss.";
-
   const courses = {
     "Math": ["Algebra 1", "Geometry", "Algebra 2", "Integrated Math", "Math Analysis", "Precalculus", "Calculus", "AP Calculus AB", "AP Statistics", "Other Math"],
     "Science": ["Biology", "Honors Biology", "Chemistry", "Physics", "Physiology", "AP Biology", "AP Chemistry", "AP Environmental Science", "AP Physics 1", "Other Science"],
@@ -30,7 +29,6 @@
       instruction: "Treat this like a real assessment. Wait until you finish before checking hints or explanations.",
       methods: ["Homework as Test", "Practice Test", "Practice Problems", "Anki", "AI Practice Test", "AI Game"] }
   };
-
   const read = (key, fallback) => {
     try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
     catch { return fallback; }
@@ -49,6 +47,7 @@
   };
   const visible = (id, yes) => $(id).classList.toggle("hidden", !yes);
   const message = value => { $("message").textContent = value; };
+  const notice = (id, value) => { $(id).textContent = value; };
   const fmt = seconds => {
     const n = Math.max(0, Math.floor(seconds || 0));
     return String(Math.floor(n / 60)).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
@@ -59,7 +58,6 @@
   };
   const dateKey = date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"),
     String(date.getDate()).padStart(2, "0")].join("-");
-
   let selectedClass = null;
   let selectedStage = null;
   let selectedMethod = "";
@@ -72,7 +70,6 @@
   let crossElapsed = 0;
   let crossStartedAt = null;
   let crossInterval = null;
-
   function dueAnkiKey() {
     const today = new Date();
     today.setHours(12, 0, 0, 0);
@@ -113,7 +110,6 @@
     message("Choose the class for your Anki session.");
     $("studyClassButtons").querySelector("button")?.focus();
   });
-
   function resetClassForm() {
     $("subjectSelect").value = "";
     $("courseSelect").innerHTML = '<option value="">Select class</option>';
@@ -199,32 +195,13 @@
   });
   $("editClassesBtn").addEventListener("click", showClassManager);
   $("homeBtn").addEventListener("click", () => {
-    const inCrosscheck = !$("crosscheckPanel").classList.contains("hidden");
-    const inTimer = !$("timerPanel").classList.contains("hidden");
-    if (inCrosscheck && !window.confirm(
-      "Return to Study Home? Your Verify time and crosscheck time will be discarded."
-    )) return;
-    if (inTimer && (startedAt !== null || elapsed > 0) && !window.confirm(
-      "Return to Study Home? This unsaved stage time will be discarded."
-    )) return;
+    if (!$("timerPanel").classList.contains("hidden") ||
+        !$("crosscheckPanel").classList.contains("hidden")) {
+      message("Finish or discard this stage before going Home.");
+      return;
+    }
     classes().length ? showHome() : showClassManager();
   });
-
-  function resetInProgress() {
-    clearInterval(tickInterval);
-    clearInterval(crossInterval);
-    tickInterval = null;
-    crossInterval = null;
-    startedAt = null;
-    crossStartedAt = null;
-    elapsed = 0;
-    crossElapsed = 0;
-    studySeconds = 0;
-    crosscheckSeconds = 0;
-    $("timerNotice").textContent = "";
-    $("crosscheckNotice").textContent = "";
-  }
-
   function showClassManager() {
     pendingAnki = false;
     visible("progressScreen", false);
@@ -234,7 +211,6 @@
     resetClassForm();
   }
   function showHome() {
-    resetInProgress();
     pendingAnki = false;
     selectedClass = null;
     selectedStage = null;
@@ -248,7 +224,6 @@
       .forEach(id => visible(id, false));
     renderClassButtons();
     renderReminder();
-    message("");
   }
   function renderClassButtons() {
     const area = $("studyClassButtons");
@@ -306,7 +281,6 @@
     });
     visible("methodPanel", true);
   }));
-
   function current(base, start) { return base + (start === null ? 0 : (Date.now() - start) / 1000); }
   function stopStudyTimer() {
     elapsed = current(elapsed, startedAt);
@@ -332,8 +306,8 @@
     $("timerMethod").textContent = method;
     $("timerInstruction").textContent = stages[selectedStage].instruction;
     $("timerDisplay").textContent = "00:00";
-    $("timerNotice").textContent = "";
     $("pauseBtn").textContent = "Pause";
+    notice("timerNotice", "");
     visible("startBtn", true);
     visible("pauseBtn", false);
     visible("finishBtn", false);
@@ -345,11 +319,7 @@
   }
   $("startBtn").addEventListener("click", () => {
     startedAt = Date.now();
-    tickInterval = setInterval(() => {
-      const time = current(elapsed, startedAt);
-      $("timerDisplay").textContent = fmt(time);
-      if (time >= 30) $("timerNotice").textContent = "";
-    }, 250);
+    tickInterval = setInterval(() => { $("timerDisplay").textContent = fmt(current(elapsed, startedAt)); }, 250);
     visible("startBtn", false);
     visible("pauseBtn", true);
     visible("finishBtn", true);
@@ -358,36 +328,30 @@
     if (startedAt !== null) {
       stopStudyTimer();
       $("pauseBtn").textContent = "Resume";
-      if ($("timerNotice").textContent) $("timerNotice").textContent = elapsed < 30
-        ? "Paused before 30 seconds. Press Resume to continue, or discard this stage." : "";
     } else {
+      notice("timerNotice", "");
       startedAt = Date.now();
-      $("timerNotice").textContent = "";
-      tickInterval = setInterval(() => {
-        const time = current(elapsed, startedAt);
-        $("timerDisplay").textContent = fmt(time);
-      }, 250);
+      tickInterval = setInterval(() => { $("timerDisplay").textContent = fmt(current(elapsed, startedAt)); }, 250);
       $("pauseBtn").textContent = "Pause";
     }
   });
   $("finishBtn").addEventListener("click", () => {
-    if (current(elapsed, startedAt) < 30) {
-      $("timerNotice").textContent = startedAt === null
-        ? "Study for at least 30 seconds. Press Resume to continue, or discard this stage."
-        : "Study for at least 30 seconds before finishing. The timer is still running.";
+    stopStudyTimer();
+    if (elapsed < 30) {
+      $("pauseBtn").textContent = "Resume";
+      notice("timerNotice", "Study for at least 30 seconds before finishing. Tap Resume to keep going, or Discard Stage.");
       return;
     }
-    stopStudyTimer();
     studySeconds = Math.floor(elapsed);
-    $("timerNotice").textContent = "";
+    notice("timerNotice", "");
     message("");
     visible("timerPanel", false);
     if (selectedStage === 2) {
       crossElapsed = 0;
       crossStartedAt = null;
       $("crosscheckDisplay").textContent = "00:00";
-      $("crosscheckNotice").textContent = "";
       $("crosscheckPauseBtn").textContent = "Pause";
+      notice("crosscheckNotice", "");
       visible("crosscheckStartBtn", true);
       visible("crosscheckPauseBtn", false);
       visible("crosscheckFinishBtn", false);
@@ -398,23 +362,16 @@
     }
   });
   $("cancelBtn").addEventListener("click", () => {
-    if ((startedAt !== null || elapsed > 0) && !window.confirm(
-      "Discard this stage? Its unsaved study time will be lost."
-    )) return;
     stopStudyTimer();
     elapsed = 0;
-    $("timerNotice").textContent = "";
+    notice("timerNotice", "");
     visible("timerPanel", false);
     openStages();
-    message("Canceled. No stage was saved.");
+    message("Stage discarded. Nothing was saved.");
   });
   $("crosscheckStartBtn").addEventListener("click", () => {
     crossStartedAt = Date.now();
-    crossInterval = setInterval(() => {
-      const time = current(crossElapsed, crossStartedAt);
-      $("crosscheckDisplay").textContent = fmt(time);
-      if (time >= 15) $("crosscheckNotice").textContent = "";
-    }, 250);
+    crossInterval = setInterval(() => { $("crosscheckDisplay").textContent = fmt(current(crossElapsed, crossStartedAt)); }, 250);
     visible("crosscheckStartBtn", false);
     visible("crosscheckPauseBtn", true);
     visible("crosscheckFinishBtn", true);
@@ -423,41 +380,33 @@
     if (crossStartedAt !== null) {
       stopCrossTimer();
       $("crosscheckPauseBtn").textContent = "Resume";
-      if ($("crosscheckNotice").textContent) $("crosscheckNotice").textContent = crossElapsed < 15
-        ? "Paused before 15 seconds. Press Resume to continue, or discard the Verify session." : "";
     } else {
+      notice("crosscheckNotice", "");
       crossStartedAt = Date.now();
-      $("crosscheckNotice").textContent = "";
-      crossInterval = setInterval(() => {
-        $("crosscheckDisplay").textContent = fmt(current(crossElapsed, crossStartedAt));
-      }, 250);
+      crossInterval = setInterval(() => { $("crosscheckDisplay").textContent = fmt(current(crossElapsed, crossStartedAt)); }, 250);
       $("crosscheckPauseBtn").textContent = "Pause";
     }
   });
   $("crosscheckFinishBtn").addEventListener("click", () => {
-    if (current(crossElapsed, crossStartedAt) < 15) {
-      $("crosscheckNotice").textContent = crossStartedAt === null
-        ? "Crosscheck for at least 15 seconds. Press Resume to continue, or discard the Verify session."
-        : "Crosscheck for at least 15 seconds before finishing. The timer is still running.";
+    stopCrossTimer();
+    if (crossElapsed < 15) {
+      $("crosscheckPauseBtn").textContent = "Resume";
+      notice("crosscheckNotice", "Crosscheck for at least 15 seconds before finishing. Tap Resume to keep going, or Discard Verify Session.");
       return;
     }
-    stopCrossTimer();
     crosscheckSeconds = Math.floor(crossElapsed);
-    $("crosscheckNotice").textContent = "";
+    notice("crosscheckNotice", "");
     message("");
     visible("crosscheckPanel", false);
     saveStage();
   });
   $("crosscheckCancelBtn").addEventListener("click", () => {
-    if (!window.confirm("Discard the Verify session? Both Verify and crosscheck time will be lost.")) return;
     stopCrossTimer();
     crossElapsed = 0;
-    studySeconds = 0;
-    crosscheckSeconds = 0;
-    $("crosscheckNotice").textContent = "";
+    notice("crosscheckNotice", "");
     visible("crosscheckPanel", false);
     openStages();
-    message("Canceled. No stage was saved.");
+    message("Verify session discarded. Nothing was saved.");
   });
   function saveStage() {
     const record = {
@@ -487,7 +436,6 @@
     showHome();
     message("Study session saved.");
   });
-
   function weeklySummary() {
     const start = new Date();
     start.setDate(start.getDate() - (start.getDay() + 6) % 7);
@@ -635,6 +583,5 @@
       "Submission attempted. Delivery cannot be confirmed here; ask your teacher or retry.";
     $("submitWeekBtn").textContent = "Retry / Update Weekly Summary";
   });
-
   classes().length ? showHome() : showClassManager();
 })();
