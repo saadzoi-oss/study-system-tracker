@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Study System Tracker</title>
+
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  >
+</head>
+
+
+<body>
+
+<main class="app">
+
+
+  <!-- HEADER -->
+
+  <header class="topbar">
+
+    <div>
+
+      <div class="eyebrow">
+        STUDY SYSTEM
+      </div>
+
+      <h1>
+        Study Tracker
+      </h1>
+
+    </div>
+
+
+    <button
+      id="progressBtn"
+      class="secondary"
+      type="button"
+    >
+      Weekly Progress
+    </button>
+
+  </header>
+
+
+
+  <!-- ====================================== -->
+  <!-- CLASS SETUP / CLASS MANAGEMENT -->
+  <!-- ====================================== -->
+
+  <section
+    id="classManagerScreen"
+    class="hidden"
+  >
+
+
+    <div class="card">
+
+      <div class="eyebrow">
+        MY CLASSES
+      </div>
+
+      <h2>
+        Add a Class
+      </h2>
+
+      <p class="muted">
+        Choose the subject first,
+        then choose your class.
+      </p>
+
+
+      <label for="subjectSelect">
+
+        <strong>
+          Subject
+        </strong>
+
+      </label>
+
+
+      <select id="subjectSelect">
+
+        <option value="">
+          Select subject
+        </option>
+
+        <option value="Math">
+          Math
+        </option>
+
+        <option value="Science">
+          Science
+        </option>
+
+        <option value="English">
+          English
+        </option>
+
+        <option value="History / Social Science">
+          History / Social Science
+        </option>
+
+        <option value="World Language">
+          World Language
+        </option>
+
+        <option value="Elective / CTE">
+          Elective / CTE
+        </option>
+
+      </select>
+
+
+
+      <div
+        id="courseSelectWrap"
+        class="hidden form-section"
+      >
+
+        <label for="courseSelect">
+
+          <strong>
+            Class
+          </strong>
+
+        </label>
+
+
+        <select id="courseSelect">
+
+          <option value="">
+            Select class
+          </option>
+
+        </select>
+
+      </div>
+
+
+
+      <div
+        id="customCourseWrap"
+        class="hidden form-section"
+      >
+
+        <label for="customCourse">
+
+          <strong>
+            Class name
+          </strong>
+
+        </label>
+
+
+        <input
+          id="customCourse"
+          type="text"
+          maxlength="60"
+          placeholder="Example: Marine Biology"
+        >
+
+      </div>
+
+
+
+      <button
+        id="addClassBtn"
+        class="primary hidden button-space"
+        type="button"
+      >
+        Add Class
+      </button>
+
+    </div>
+
+
+
+    <!-- SAVED CLASSES -->
+
+    <div
+      id="savedClassesPanel"
+      class="card hidden"
+    >
+
+      <h2>
+        My Classes
+      </h2>
+
+      <div id="savedClassesList"></div>
+
+
+      <div
+        id="classManagerActions"
+        class="actions left button-space"
+      >
+
+        <button
+          id="addAnotherClassBtn"
+          class="primary"
+          type="button"
+        >
+          Add Another Class
+        </button>
+
+
+        <button
+          id="doneAddingClassesBtn"
+          class="secondary"
+          type="button"
+        >
+          I'm Done
+        </button>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+
+  <!-- ====================================== -->
+  <!-- MAIN STUDY AREA -->
+  <!-- ====================================== -->
+
+  <section
+    id="studyScreen"
+    class="hidden"
+  >
+
+
+    <!-- CHOOSE SAVED CLASS -->
+
+    <section
+      id="studyClassPanel"
+      class="card"
+    >
+
+      <div class="eyebrow">
+        MY CLASSES
+      </div>
+
+      <h2>
+        Which class are you studying?
+      </h2>
+
+
+      <div
+        id="studyClassButtons"
+        class="class-button-grid"
+      ></div>
+
+
+      <button
+        id="editClassesBtn"
+        class="secondary button-space"
+        type="button"
+      >
+        Edit My Classes
+      </button>
+
+    </section>
+
+
+
+    <!-- CHOOSE STAGE -->
+
+    <section
+      id="stagePanel"
+      class="hidden"
+    >
+
+
+      <div class="selected-class-banner">
+
+        <span class="muted">
+          Studying
+        </span>
+
+        <strong id="selectedClassName">
+        </strong>
+
+      </div>
+
+
+      <h2>
+        Pick your stage
+      </h2>
+
+
+      <div class="stage-grid">
+
+
+        <!-- STAGE 1 -->
+
+        <button
+          class="stage-card"
+          data-stage="1"
+          type="button"
+        >
+
+          <span class="eyebrow">
+            STAGE 1
+          </span>
+
+          <strong>
+            Learn
+          </strong>
+
+          <span>
+            Build or rebuild your understanding
+            using learning materials and resources.
+          </span>
+
+        </button>
+
+
+
+        <!-- STAGE 2 -->
+
+        <button
+          class="stage-card"
+          data-stage="2"
+          type="button"
+        >
+
+          <span class="eyebrow">
+            STAGE 2
+          </span>
+
+          <strong>
+            Verify
+          </strong>
+
+          <span>
+            Put your materials away and see
+            what you can teach or produce
+            from memory.
+          </span>
+
+        </button>
+
+
+
+        <!-- STAGE 3 -->
+
+        <button
+          class="stage-card"
+          data-stage="3"
+          type="button"
+        >
+
+          <span class="eyebrow">
+            STAGE 3
+          </span>
+
+          <strong>
+            Assess
+          </strong>
+
+          <span>
+            Test what you can do independently
+            without help.
+          </span>
+
+        </button>
+
+      </div>
+
+
+
+      <!-- METHOD LIST -->
+
+      <div
+        id="methodPanel"
+        class="card hidden"
+      >
+
+        <h2 id="methodTitle"></h2>
+
+        <p
+          id="methodPurpose"
+          class="muted"
+        ></p>
+
+
+        <div
+          id="methodButtons"
+          class="method-grid"
+        ></div>
+
+      </div>
+
+
+      <button
+        id="changeClassBtn"
+        class="secondary"
+        type="button"
+      >
+        Change Class
+      </button>
+
+    </section>
+
+
+
+    <!-- ====================================== -->
+    <!-- MAIN TIMER -->
+    <!-- ====================================== -->
+
+    <section
+      id="timerPanel"
+      class="timer-card hidden"
+    >
+
+      <div
+        id="timerClass"
+        class="eyebrow"
+      ></div>
+
+
+      <h2 id="timerStage"></h2>
+
+
+      <div
+        id="timerMethod"
+        class="method-name"
+      ></div>
+
+
+      <p
+        id="timerInstruction"
+        class="muted timer-instruction"
+      ></p>
+
+
+      <div
+        id="timerDisplay"
+        class="timer"
+      >
+        00:00
+      </div>
+
+
+      <div class="actions">
+
+        <button
+          id="startBtn"
+          class="primary"
+          type="button"
+        >
+          Start
+        </button>
+
+
+        <button
+          id="pauseBtn"
+          class="secondary hidden"
+          type="button"
+        >
+          Pause
+        </button>
+
+
+        <button
+          id="finishBtn"
+          class="secondary hidden"
+          type="button"
+        >
+          Finish
+        </button>
+
+      </div>
+
+    </section>
+
+
+
+    <!-- ====================================== -->
+    <!-- CROSSCHECK TIMER -->
+    <!-- ====================================== -->
+
+    <section
+      id="crosscheckPanel"
+      class="timer-card hidden"
+    >
+
+      <div class="eyebrow">
+        STAGE 2 FOLLOW-UP
+      </div>
+
+
+      <h2>
+        Crosscheck
+      </h2>
+
+
+      <p>
+        Now compare what you taught or
+        produced with your notes, textbook,
+        or other course materials.
+      </p>
+
+
+      <p class="muted">
+        Look for anything you missed,
+        misunderstood, or could not explain.
+      </p>
+
+
+      <div
+        id="crosscheckDisplay"
+        class="timer"
+      >
+        00:00
+      </div>
+
+
+      <div class="actions">
+
+        <button
+          id="crosscheckStartBtn"
+          class="primary"
+          type="button"
+        >
+          Start Crosscheck
+        </button>
+
+
+        <button
+          id="crosscheckPauseBtn"
+          class="secondary hidden"
+          type="button"
+        >
+          Pause
+        </button>
+
+
+        <button
+          id="crosscheckFinishBtn"
+          class="secondary hidden"
+          type="button"
+        >
+          Finish Crosscheck
+        </button>
+
+      </div>
+
+    </section>
+
+
+
+    <!-- ====================================== -->
+    <!-- COMPLETED STAGE -->
+    <!-- ====================================== -->
+
+    <section
+      id="completePanel"
+      class="card hidden"
+    >
+
+      <div class="eyebrow">
+        STAGE COMPLETE
+      </div>
+
+
+      <h2 id="completeTitle"></h2>
+
+
+      <p id="completeDetails"></p>
+
+
+      <div class="actions left">
+
+
+        <button
+          id="anotherStageBtn"
+          class="primary"
+          type="button"
+        >
+          Choose Another Stage
+        </button>
+
+
+        <button
+          id="finishStudyingBtn"
+          class="secondary"
+          type="button"
+        >
+          Finish Studying
+        </button>
+
+      </div>
+
+    </section>
+
+
+  </section>
+
+
+
+  <!-- ====================================== -->
+  <!-- WEEKLY PROGRESS -->
+  <!-- ====================================== -->
+
+  <section
+    id="progressScreen"
+    class="hidden"
+  >
+
+
+    <div class="topbar">
+
+      <div>
+
+        <div class="eyebrow">
+          YOUR STUDYING
+        </div>
+
+        <h2>
+          This Week
+        </h2>
+
+      </div>
+
+
+      <button
+        id="backBtn"
+        class="secondary"
+        type="button"
+      >
+        Back to Study
+      </button>
+
+    </div>
+
+
+
+    <!-- METRICS -->
+
+    <div class="metric-grid">
+
+
+      <div class="metric-card">
+
+        <span>
+          Total Study Time
+        </span>
+
+        <strong id="weeklyTotal">
+          0 min
+        </strong>
+
+      </div>
+
+
+
+      <div class="metric-card">
+
+        <span>
+          Completed Stages
+        </span>
+
+        <strong id="weeklyStages">
+          0
+        </strong>
+
+      </div>
+
+
+
+      <div class="metric-card">
+
+        <span>
+          Study Days
+        </span>
+
+        <strong id="weeklyDays">
+          0
+        </strong>
+
+      </div>
+
+    </div>
+
+
+
+    <!-- STAGES -->
+
+    <div class="card">
+
+      <h2>
+        How You Used Your Time
+      </h2>
+
+      <div id="stageBreakdown"></div>
+
+    </div>
+
+
+
+    <!-- CLASSES + METHODS -->
+
+    <div class="two-column">
+
+
+      <div class="card">
+
+        <h2>
+          By Class
+        </h2>
+
+        <div id="classBreakdown"></div>
+
+      </div>
+
+
+
+      <div class="card">
+
+        <h2>
+          Methods Used
+        </h2>
+
+        <div id="methodBreakdown"></div>
+
+      </div>
+
+
+    </div>
+
+
+
+    <!-- WEEKLY SHARE -->
+
+    <div class="card">
+
+      <div class="eyebrow">
+        ANONYMOUS WEEKLY REPORT
+      </div>
+
+
+      <h2>
+        Share Your Weekly Summary
+      </h2>
+
+
+      <p>
+        Your individual study sessions stay
+        on this device.
+      </p>
+
+
+      <p class="muted">
+        The weekly report contains your study
+        totals and class names, but does not
+        contain your name, email address,
+        LAUSD student ID, assignments, or
+        individual study-session records.
+      </p>
+
+
+      <div
+        id="submissionStatus"
+        class="status-box"
+      >
+        This week has not been shared yet.
+      </div>
+
+
+      <button
+        id="submitWeekBtn"
+        class="primary"
+        type="button"
+      >
+        Share Weekly Summary
+      </button>
+
+    </div>
+
+  </section>
+
+
+
+  <!-- Hidden iframe used for Google Apps Script submissions -->
+
+  <iframe
+    id="submissionFrame"
+    name="submissionFrame"
+    class="hidden"
+    title="Weekly summary submission"
+  ></iframe>
+
+
+  <p
+    id="message"
+    class="muted message"
+  ></p>
+
+
+</main>
+
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
