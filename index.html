@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Study System Tracker</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <main class="app">
@@ -12,7 +12,6 @@
       <div><div class="eyebrow">STUDY SYSTEM</div><h1>Study System Tracker</h1></div>
       <button id="homeBtn" class="secondary hidden" type="button">Study Home</button>
     </header>
-
     <section id="classManagerScreen" class="stack" aria-label="Set up classes">
       <div class="card">
         <div class="eyebrow">FIRST STEP</div>
@@ -44,7 +43,6 @@
         </div>
       </div>
     </section>
-
     <section id="studyScreen" class="stack hidden" aria-label="Study">
       <div id="studyClassPanel" class="stack">
         <div id="navigationScreen" class="card" aria-label="Navigation">
@@ -83,7 +81,6 @@
           </label>
         </div>
       </div>
-
       <div id="stagePanel" class="stack hidden">
         <div class="card">
           <div class="eyebrow" id="selectedClassName"></div>
@@ -101,7 +98,6 @@
           <div id="methodButtons" class="method-grid"></div>
         </div>
       </div>
-
       <div id="timerPanel" class="timer-card hidden">
         <div id="timerClass" class="eyebrow"></div>
         <h2 id="timerStage"></h2>
@@ -116,7 +112,6 @@
           <button id="cancelBtn" class="secondary" type="button">Discard Stage</button>
         </div>
       </div>
-
       <div id="crosscheckPanel" class="timer-card hidden">
         <div class="eyebrow">STAGE 2 FOLLOW-UP</div>
         <h2>Crosscheck</h2>
@@ -131,7 +126,6 @@
         </div>
         <p class="muted small-note field">Discarding also removes the Verify time. Finish the crosscheck to save both.</p>
       </div>
-
       <div id="completePanel" class="card hidden">
         <div class="eyebrow">STAGE COMPLETE</div>
         <h2 id="completeTitle"></h2>
@@ -142,7 +136,6 @@
         </div>
       </div>
     </section>
-
     <section id="progressScreen" class="stack hidden" aria-label="Weekly progress">
       <div class="card">
         <button id="backBtn" class="secondary" type="button">Back to Study Home</button>
@@ -163,11 +156,10 @@
         <p id="submissionStatus" class="muted field" aria-live="polite"></p>
       </div>
     </section>
-
     <p id="message" class="muted" role="status" aria-live="polite"></p>
     <iframe id="submissionFrame" name="submissionFrame" class="hidden" title="Weekly summary submission"></iframe>
   </main>
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
