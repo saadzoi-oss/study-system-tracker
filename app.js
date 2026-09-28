@@ -16,6 +16,12 @@
   const SUBMISSION_STORAGE_KEY =
     "studySystem.weeklySubmissions.v2";
 
+  const ANKI_DONE_PREFIX =
+    "studySystem.ankiDone.v2.";
+
+  const ANKI_DISMISS_PREFIX =
+    "studySystem.ankiDismiss.v2.";
+
 
   // ==========================================
   // COURSE CATALOG
@@ -167,7 +173,7 @@
         "Homework as Test",
         "Practice Test",
         "Practice Problems",
-        "Flashcards",
+        "Anki",
         "AI Practice Test",
         "AI Game"
       ]
@@ -388,6 +394,9 @@
   let completedCrosscheckSeconds =
     0;
 
+  let pendingAnkiLaunch =
+    false;
+
 
   // ==========================================
   // LOCAL STORAGE
@@ -506,6 +515,611 @@
     }
 
     return id;
+  }
+
+
+  // ==========================================
+  // ANKI REMINDER SYSTEM
+  // Monday + Thursday
+  // ==========================================
+
+  function localDateKey(
+    date = new Date()
+  ) {
+
+    const year =
+      date.getFullYear();
+
+    const month =
+      String(
+        date.getMonth() + 1
+      ).padStart(
+        2,
+        "0"
+      );
+
+    const day =
+      String(
+        date.getDate()
+      ).padStart(
+        2,
+        "0"
+      );
+
+    return (
+      year +
+      "-" +
+      month +
+      "-" +
+      day
+    );
+  }
+
+
+  function isAnkiDay(date) {
+
+    const day =
+      date.getDay();
+
+    return (
+      day === 1 ||
+      day === 4
+    );
+  }
+
+
+  function isAnkiDone(
+    dateKey
+  ) {
+
+    return (
+      localStorage.getItem(
+        ANKI_DONE_PREFIX +
+        dateKey
+      ) === "1"
+    );
+  }
+
+
+  function markAnkiDone(
+    dateKey
+  ) {
+
+    if (!dateKey) {
+
+      return;
+    }
+
+    localStorage.setItem(
+      ANKI_DONE_PREFIX +
+      dateKey,
+      "1"
+    );
+  }
+
+
+  function isAnkiDismissedToday() {
+
+    const todayKey =
+      localDateKey();
+
+    return (
+      localStorage.getItem(
+        ANKI_DISMISS_PREFIX +
+        todayKey
+      ) === "1"
+    );
+  }
+
+
+  function dismissAnkiForToday() {
+
+    const todayKey =
+      localDateKey();
+
+    localStorage.setItem(
+      ANKI_DISMISS_PREFIX +
+      todayKey,
+      "1"
+    );
+  }
+
+
+  // Only looks at the CURRENT WEEK.
+  // Old missed sessions do not accumulate forever.
+
+  function getOutstandingAnkiDays() {
+
+    const today =
+      new Date();
+
+    today.setHours(
+      12,
+      0,
+      0,
+      0
+    );
+
+
+    const monday =
+      new Date(
+        today
+      );
+
+
+    const day =
+      today.getDay();
+
+
+    const daysSinceMonday =
+      day === 0
+        ? 6
+        : day - 1;
+
+
+    monday.setDate(
+      today.getDate() -
+      daysSinceMonday
+    );
+
+
+    const outstanding =
+      [];
+
+
+    const cursor =
+      new Date(
+        monday
+      );
+
+
+    while (
+      cursor <= today
+    ) {
+
+      if (
+        isAnkiDay(
+          cursor
+        )
+      ) {
+
+        const key =
+          localDateKey(
+            cursor
+          );
+
+
+        if (
+          !isAnkiDone(
+            key
+          )
+        ) {
+
+          outstanding.push({
+
+            date:
+              new Date(
+                cursor
+              ),
+
+            dateKey:
+              key
+          });
+        }
+      }
+
+
+      cursor.setDate(
+        cursor.getDate() +
+        1
+      );
+    }
+
+
+    return outstanding;
+  }
+
+
+  function completeAnkiRequirement() {
+
+    const outstanding =
+      getOutstandingAnkiDays();
+
+
+    if (
+      outstanding.length === 0
+    ) {
+
+      return;
+    }
+
+
+    // Clears oldest outstanding requirement first.
+
+    markAnkiDone(
+      outstanding[0]
+        .dateKey
+    );
+  }
+
+
+  function dayName(date) {
+
+    return date.toLocaleDateString(
+      undefined,
+      {
+        weekday:
+          "long"
+      }
+    );
+  }
+
+
+  // ==========================================
+  // BUILD ANKI REMINDER UI
+  // This is created by JavaScript, so you do
+  // NOT need to edit index.html for it.
+  // ==========================================
+
+  function createAnkiReminderCard() {
+
+    if (
+      document.getElementById(
+        "ankiReminderCard"
+      )
+    ) {
+
+      return;
+    }
+
+
+    const card =
+      document.createElement(
+        "div"
+      );
+
+
+    card.id =
+      "ankiReminderCard";
+
+
+    card.className =
+      "card hidden";
+
+
+    card.style.marginBottom =
+      "16px";
+
+
+    const label =
+      document.createElement(
+        "div"
+      );
+
+
+    label.textContent =
+      "ANKI REMINDER";
+
+
+    label.style.fontSize =
+      "0.8rem";
+
+
+    label.style.fontWeight =
+      "700";
+
+
+    label.style.opacity =
+      "0.7";
+
+
+    label.style.marginBottom =
+      "6px";
+
+
+    const title =
+      document.createElement(
+        "h2"
+      );
+
+
+    title.id =
+      "ankiReminderTitle";
+
+
+    title.style.marginBottom =
+      "8px";
+
+
+    const text =
+      document.createElement(
+        "p"
+      );
+
+
+    text.id =
+      "ankiReminderText";
+
+
+    const buttonRow =
+      document.createElement(
+        "div"
+      );
+
+
+    buttonRow.style.display =
+      "flex";
+
+
+    buttonRow.style.flexWrap =
+      "wrap";
+
+
+    buttonRow.style.gap =
+      "10px";
+
+
+    const startButton =
+      document.createElement(
+        "button"
+      );
+
+
+    startButton.id =
+      "ankiReminderStartBtn";
+
+
+    startButton.type =
+      "button";
+
+
+    startButton.className =
+      "primary";
+
+
+    startButton.textContent =
+      "Start Anki Session";
+
+
+    const dismissButton =
+      document.createElement(
+        "button"
+      );
+
+
+    dismissButton.id =
+      "ankiReminderDismissBtn";
+
+
+    dismissButton.type =
+      "button";
+
+
+    dismissButton.className =
+      "secondary";
+
+
+    dismissButton.textContent =
+      "Hide for Today";
+
+
+    buttonRow.appendChild(
+      startButton
+    );
+
+
+    buttonRow.appendChild(
+      dismissButton
+    );
+
+
+    card.appendChild(
+      label
+    );
+
+
+    card.appendChild(
+      title
+    );
+
+
+    card.appendChild(
+      text
+    );
+
+
+    card.appendChild(
+      buttonRow
+    );
+
+
+    if (
+      studyClassPanel &&
+      studyClassPanel.parentNode
+    ) {
+
+      studyClassPanel.parentNode.insertBefore(
+        card,
+        studyClassPanel
+      );
+
+    } else if (
+      studyScreen
+    ) {
+
+      studyScreen.prepend(
+        card
+      );
+    }
+
+
+    startButton.addEventListener(
+      "click",
+      () => {
+
+        pendingAnkiLaunch =
+          true;
+
+
+        const classes =
+          getSavedClasses();
+
+
+        if (
+          classes.length === 1
+        ) {
+
+          selectedClass =
+            classes[0];
+
+
+          pendingAnkiLaunch =
+            false;
+
+
+          selectedStage =
+            3;
+
+
+          openTimer(
+            "Anki"
+          );
+
+
+          card.classList.add(
+            "hidden"
+          );
+
+
+          return;
+        }
+
+
+        showStudyHome();
+
+
+        message.textContent =
+          "Choose the class for your Anki session.";
+
+      }
+    );
+
+
+    dismissButton.addEventListener(
+      "click",
+      () => {
+
+        dismissAnkiForToday();
+
+
+        card.classList.add(
+          "hidden"
+        );
+      }
+    );
+  }
+
+
+  function renderAnkiReminder() {
+
+    createAnkiReminderCard();
+
+
+    const card =
+      document.getElementById(
+        "ankiReminderCard"
+      );
+
+
+    const title =
+      document.getElementById(
+        "ankiReminderTitle"
+      );
+
+
+    const text =
+      document.getElementById(
+        "ankiReminderText"
+      );
+
+
+    if (
+      !card ||
+      !title ||
+      !text
+    ) {
+
+      return;
+    }
+
+
+    card.classList.add(
+      "hidden"
+    );
+
+
+    if (
+      isAnkiDismissedToday()
+    ) {
+
+      return;
+    }
+
+
+    const outstanding =
+      getOutstandingAnkiDays();
+
+
+    if (
+      outstanding.length === 0
+    ) {
+
+      return;
+    }
+
+
+    const requirement =
+      outstanding[0];
+
+
+    const todayKey =
+      localDateKey();
+
+
+    if (
+      requirement.dateKey ===
+      todayKey
+    ) {
+
+      title.textContent =
+        "Anki due today";
+
+
+      text.textContent =
+        "Today is " +
+        dayName(
+          requirement.date
+        ) +
+        ". Complete one Anki review session.";
+
+    } else {
+
+      title.textContent =
+        "Anki make-up session due";
+
+
+      text.textContent =
+        "You missed your " +
+        dayName(
+          requirement.date
+        ) +
+        " Anki session. Complete one session when you can.";
+    }
+
+
+    card.classList.remove(
+      "hidden"
+    );
   }
 
 
@@ -951,6 +1565,28 @@
             selectedClass =
               course;
 
+
+            if (
+              pendingAnkiLaunch
+            ) {
+
+              pendingAnkiLaunch =
+                false;
+
+
+              selectedStage =
+                3;
+
+
+              openTimer(
+                "Anki"
+              );
+
+
+              return;
+            }
+
+
             openStageSelection();
           }
         );
@@ -1177,9 +1813,29 @@
       "hidden"
     );
 
+    studyClassPanel.classList.add(
+      "hidden"
+    );
+
     timerPanel.classList.remove(
       "hidden"
     );
+
+
+    const ankiCard =
+      document.getElementById(
+        "ankiReminderCard"
+      );
+
+
+    if (
+      ankiCard
+    ) {
+
+      ankiCard.classList.add(
+        "hidden"
+      );
+    }
   }
 
 
@@ -1552,6 +2208,20 @@
     );
 
 
+    // Any completed Stage 3 Anki session clears
+    // the oldest outstanding Monday/Thursday
+    // requirement, whether the student entered
+    // through the reminder or selected Anki manually.
+
+    if (
+      selectedStage === 3 &&
+      selectedMethod === "Anki"
+    ) {
+
+      completeAnkiRequirement();
+    }
+
+
     completeTitle.textContent =
       "Stage " +
       selectedStage +
@@ -1628,6 +2298,9 @@
 
       message.textContent =
         "Study session saved.";
+
+
+      renderAnkiReminder();
     }
   );
 
@@ -2255,6 +2928,7 @@
 
   // ==========================================
   // WEEKLY SUBMISSION
+  // KEEPING YOUR EXISTING ENDPOINT
   // ==========================================
 
   function updateSubmissionStatus(
@@ -2538,6 +3212,8 @@
 
 
     renderStudyClassButtons();
+
+    renderAnkiReminder();
   }
 
 
@@ -2546,6 +3222,9 @@
   // ==========================================
 
   function initialize() {
+
+    createAnkiReminderCard();
+
 
     const classes =
       getSavedClasses();
