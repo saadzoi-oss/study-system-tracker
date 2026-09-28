@@ -2,25 +2,26 @@
 
   // ==========================================
   // STORAGE
+  // v3 = fresh app storage
   // ==========================================
 
   const CLASS_STORAGE_KEY =
-    "studySystem.classes.v2";
+    "studySystem.classes.v3";
 
   const SESSION_STORAGE_KEY =
-    "studySystem.sessions.v2";
+    "studySystem.sessions.v3";
 
   const DEVICE_ID_KEY =
-    "studySystem.deviceId.v2";
+    "studySystem.deviceId.v3";
 
   const SUBMISSION_STORAGE_KEY =
-    "studySystem.weeklySubmissions.v2";
+    "studySystem.weeklySubmissions.v3";
 
   const ANKI_DONE_PREFIX =
-    "studySystem.ankiDone.v2.";
+    "studySystem.ankiDone.v3.";
 
   const ANKI_DISMISS_PREFIX =
-    "studySystem.ankiDismiss.v2.";
+    "studySystem.ankiDismiss.v3.";
 
 
   // ==========================================
@@ -118,13 +119,15 @@
 
 
   // ==========================================
-  // STUDY SYSTEM STAGES
+  // STUDY STAGES
   // ==========================================
 
   const stages = {
 
     1: {
-      name: "Learn",
+
+      name:
+        "Learn",
 
       purpose:
         "Build or rebuild your understanding using your learning materials.",
@@ -143,8 +146,11 @@
       ]
     },
 
+
     2: {
-      name: "Verify",
+
+      name:
+        "Verify",
 
       purpose:
         "See what you can teach or produce from memory.",
@@ -160,8 +166,11 @@
       ]
     },
 
+
     3: {
-      name: "Assess",
+
+      name:
+        "Assess",
 
       purpose:
         "Test what you can do independently without help.",
@@ -353,6 +362,23 @@
   const submissionStatus =
     $("submissionStatus");
 
+
+  const ankiReminderCard =
+    $("ankiReminderCard");
+
+  const ankiReminderTitle =
+    $("ankiReminderTitle");
+
+  const ankiReminderText =
+    $("ankiReminderText");
+
+  const ankiReminderStartBtn =
+    $("ankiReminderStartBtn");
+
+  const ankiReminderDismissBtn =
+    $("ankiReminderDismissBtn");
+
+
   const message =
     $("message");
 
@@ -370,6 +396,10 @@
   let selectedMethod =
     "";
 
+  let pendingAnkiLaunch =
+    false;
+
+
   let elapsedSeconds =
     0;
 
@@ -378,6 +408,7 @@
 
   let timerInterval =
     null;
+
 
   let crosscheckElapsed =
     0;
@@ -388,26 +419,16 @@
   let crosscheckInterval =
     null;
 
+
   let completedStudySeconds =
     0;
 
   let completedCrosscheckSeconds =
     0;
 
-  /*
-    Used only when the student presses
-    "Start Anki Session" from the reminder.
-
-    They still choose one of their saved
-    classes before the Anki timer begins.
-  */
-
-  let pendingAnkiLaunch =
-    false;
-
 
   // ==========================================
-  // LOCAL STORAGE
+  // STORAGE HELPERS
   // ==========================================
 
   function getSavedClasses() {
@@ -495,6 +516,7 @@
         DEVICE_ID_KEY
       );
 
+
     if (!id) {
 
       if (
@@ -516,592 +538,15 @@
             .slice(2);
       }
 
+
       localStorage.setItem(
         DEVICE_ID_KEY,
         id
       );
     }
 
+
     return id;
-  }
-
-
-  // ==========================================
-  // ANKI REMINDER HELPERS
-  // Monday + Thursday
-  // ==========================================
-
-  function localDateKey(
-    date = new Date()
-  ) {
-
-    const year =
-      date.getFullYear();
-
-    const month =
-      String(
-        date.getMonth() + 1
-      ).padStart(
-        2,
-        "0"
-      );
-
-    const day =
-      String(
-        date.getDate()
-      ).padStart(
-        2,
-        "0"
-      );
-
-    return (
-      year +
-      "-" +
-      month +
-      "-" +
-      day
-    );
-  }
-
-
-  function isAnkiDay(date) {
-
-    const day =
-      date.getDay();
-
-    return (
-      day === 1 ||
-      day === 4
-    );
-  }
-
-
-  function isAnkiDone(
-    dateKey
-  ) {
-
-    return (
-      localStorage.getItem(
-        ANKI_DONE_PREFIX +
-        dateKey
-      ) === "1"
-    );
-  }
-
-
-  function markAnkiDone(
-    dateKey
-  ) {
-
-    if (!dateKey) {
-
-      return;
-    }
-
-    localStorage.setItem(
-      ANKI_DONE_PREFIX +
-      dateKey,
-      "1"
-    );
-  }
-
-
-  function isAnkiDismissedToday() {
-
-    const todayKey =
-      localDateKey();
-
-    return (
-      localStorage.getItem(
-        ANKI_DISMISS_PREFIX +
-        todayKey
-      ) === "1"
-    );
-  }
-
-
-  function dismissAnkiForToday() {
-
-    const todayKey =
-      localDateKey();
-
-    localStorage.setItem(
-      ANKI_DISMISS_PREFIX +
-      todayKey,
-      "1"
-    );
-  }
-
-
-  function getOutstandingAnkiDays() {
-
-    const today =
-      new Date();
-
-    today.setHours(
-      12,
-      0,
-      0,
-      0
-    );
-
-
-    const monday =
-      new Date(
-        today
-      );
-
-
-    const currentDay =
-      today.getDay();
-
-
-    const daysSinceMonday =
-      currentDay === 0
-        ? 6
-        : currentDay - 1;
-
-
-    monday.setDate(
-      today.getDate() -
-      daysSinceMonday
-    );
-
-
-    const outstanding =
-      [];
-
-
-    const cursor =
-      new Date(
-        monday
-      );
-
-
-    while (
-      cursor <= today
-    ) {
-
-      if (
-        isAnkiDay(
-          cursor
-        )
-      ) {
-
-        const key =
-          localDateKey(
-            cursor
-          );
-
-
-        if (
-          !isAnkiDone(
-            key
-          )
-        ) {
-
-          outstanding.push({
-
-            date:
-              new Date(
-                cursor
-              ),
-
-            dateKey:
-              key
-          });
-        }
-      }
-
-
-      cursor.setDate(
-        cursor.getDate() +
-        1
-      );
-    }
-
-
-    return outstanding;
-  }
-
-
-  function completeAnkiRequirement() {
-
-    const outstanding =
-      getOutstandingAnkiDays();
-
-
-    if (
-      outstanding.length === 0
-    ) {
-
-      return;
-    }
-
-
-    /*
-      One completed Anki session clears
-      one outstanding required session.
-
-      Oldest requirement clears first.
-    */
-
-    markAnkiDone(
-      outstanding[0]
-        .dateKey
-    );
-  }
-
-
-  function getDayName(date) {
-
-    return date.toLocaleDateString(
-      undefined,
-      {
-        weekday:
-          "long"
-      }
-    );
-  }
-
-
-  // ==========================================
-  // ANKI REMINDER UI
-  // Created automatically so index.html
-  // does not need to be changed.
-  // ==========================================
-
-  function createAnkiReminderCard() {
-
-    if (
-      document.getElementById(
-        "ankiReminderCard"
-      )
-    ) {
-
-      return;
-    }
-
-
-    const card =
-      document.createElement(
-        "div"
-      );
-
-
-    card.id =
-      "ankiReminderCard";
-
-    card.className =
-      "card hidden";
-
-    card.style.marginBottom =
-      "16px";
-
-
-    const label =
-      document.createElement(
-        "div"
-      );
-
-    label.textContent =
-      "ANKI REMINDER";
-
-    label.style.fontSize =
-      "0.8rem";
-
-    label.style.fontWeight =
-      "700";
-
-    label.style.opacity =
-      "0.7";
-
-    label.style.marginBottom =
-      "6px";
-
-
-    const title =
-      document.createElement(
-        "h2"
-      );
-
-    title.id =
-      "ankiReminderTitle";
-
-
-    const text =
-      document.createElement(
-        "p"
-      );
-
-    text.id =
-      "ankiReminderText";
-
-
-    const buttonRow =
-      document.createElement(
-        "div"
-      );
-
-    buttonRow.style.display =
-      "flex";
-
-    buttonRow.style.flexWrap =
-      "wrap";
-
-    buttonRow.style.gap =
-      "10px";
-
-
-    const startButton =
-      document.createElement(
-        "button"
-      );
-
-    startButton.id =
-      "ankiReminderStartBtn";
-
-    startButton.type =
-      "button";
-
-    startButton.className =
-      "primary";
-
-    startButton.textContent =
-      "Start Anki Session";
-
-
-    const dismissButton =
-      document.createElement(
-        "button"
-      );
-
-    dismissButton.id =
-      "ankiReminderDismissBtn";
-
-    dismissButton.type =
-      "button";
-
-    dismissButton.className =
-      "secondary";
-
-    dismissButton.textContent =
-      "Hide for Today";
-
-
-    buttonRow.appendChild(
-      startButton
-    );
-
-    buttonRow.appendChild(
-      dismissButton
-    );
-
-
-    card.appendChild(
-      label
-    );
-
-    card.appendChild(
-      title
-    );
-
-    card.appendChild(
-      text
-    );
-
-    card.appendChild(
-      buttonRow
-    );
-
-
-    /*
-      Put reminder directly above
-      the saved-class choices.
-    */
-
-    if (
-      studyClassPanel &&
-      studyClassPanel.parentNode
-    ) {
-
-      studyClassPanel.parentNode.insertBefore(
-        card,
-        studyClassPanel
-      );
-
-    } else {
-
-      studyScreen.prepend(
-        card
-      );
-    }
-
-
-    startButton.addEventListener(
-      "click",
-      () => {
-
-        /*
-          Student must still choose one
-          of the classes they previously saved.
-        */
-
-        pendingAnkiLaunch =
-          true;
-
-        selectedClass =
-          null;
-
-        selectedStage =
-          null;
-
-        selectedMethod =
-          "";
-
-        stagePanel.classList.add(
-          "hidden"
-        );
-
-        methodPanel.classList.add(
-          "hidden"
-        );
-
-        studyClassPanel.classList.remove(
-          "hidden"
-        );
-
-        renderStudyClassButtons();
-
-        message.textContent =
-          "Choose the class for your Anki session.";
-      }
-    );
-
-
-    dismissButton.addEventListener(
-      "click",
-      () => {
-
-        dismissAnkiForToday();
-
-        card.classList.add(
-          "hidden"
-        );
-      }
-    );
-  }
-
-
-  function renderAnkiReminder() {
-
-    const card =
-      document.getElementById(
-        "ankiReminderCard"
-      );
-
-    const title =
-      document.getElementById(
-        "ankiReminderTitle"
-      );
-
-    const text =
-      document.getElementById(
-        "ankiReminderText"
-      );
-
-
-    if (
-      !card ||
-      !title ||
-      !text
-    ) {
-
-      return;
-    }
-
-
-    card.classList.add(
-      "hidden"
-    );
-
-
-    /*
-      Never show reminder before
-      student has set up classes.
-    */
-
-    if (
-      getSavedClasses()
-        .length === 0
-    ) {
-
-      return;
-    }
-
-
-    if (
-      isAnkiDismissedToday()
-    ) {
-
-      return;
-    }
-
-
-    const outstanding =
-      getOutstandingAnkiDays();
-
-
-    if (
-      outstanding.length === 0
-    ) {
-
-      return;
-    }
-
-
-    const requirement =
-      outstanding[0];
-
-
-    const todayKey =
-      localDateKey();
-
-
-    if (
-      requirement.dateKey ===
-      todayKey
-    ) {
-
-      title.textContent =
-        "Anki due today";
-
-
-      text.textContent =
-        "Today is " +
-        getDayName(
-          requirement.date
-        ) +
-        ". Complete one Anki session.";
-
-    } else {
-
-      title.textContent =
-        "Anki make-up session due";
-
-
-      text.textContent =
-        "You missed your " +
-        getDayName(
-          requirement.date
-        ) +
-        " Anki session. Complete one session when you can.";
-    }
-
-
-    card.classList.remove(
-      "hidden"
-    );
   }
 
 
@@ -1125,16 +570,20 @@
     courseSelect.innerHTML =
       '<option value="">Select class</option>';
 
+
     customCourse.value =
       "";
+
 
     customCourseWrap.classList.add(
       "hidden"
     );
 
+
     addClassBtn.classList.add(
       "hidden"
     );
+
 
     if (!subject) {
 
@@ -1145,8 +594,10 @@
       return;
     }
 
+
     const courses =
       courseCatalog[subject] || [];
+
 
     courses.forEach(
       course => {
@@ -1162,11 +613,13 @@
         option.textContent =
           course;
 
+
         courseSelect.appendChild(
           option
         );
       }
     );
+
 
     courseSelectWrap.classList.remove(
       "hidden"
@@ -1178,10 +631,11 @@
     "change",
     () => {
 
-      const selected =
+      const value =
         courseSelect.value;
 
-      if (!selected) {
+
+      if (!value) {
 
         customCourseWrap.classList.add(
           "hidden"
@@ -1194,8 +648,9 @@
         return;
       }
 
+
       if (
-        selected.startsWith(
+        value.startsWith(
           "Other"
         )
       ) {
@@ -1211,6 +666,7 @@
         );
       }
 
+
       addClassBtn.classList.remove(
         "hidden"
       );
@@ -1225,8 +681,10 @@
       const subject =
         subjectSelect.value;
 
+
       let className =
         courseSelect.value;
+
 
       if (
         className.startsWith(
@@ -1237,6 +695,7 @@
         className =
           customCourse.value.trim();
       }
+
 
       if (
         !subject ||
@@ -1249,40 +708,50 @@
         return;
       }
 
+
       const classes =
         getSavedClasses();
 
+
       const exists =
         classes.some(
-          course =>
-            course.name
+          item =>
+            item.name
               .toLowerCase() ===
             className
               .toLowerCase()
         );
 
+
       if (!exists) {
 
         classes.push({
+
           name:
             className,
 
           subject:
             subject
+
         });
+
 
         saveClassList(
           classes
         );
       }
 
+
       renderSavedClasses();
+
 
       savedClassesPanel.classList.remove(
         "hidden"
       );
 
+
       resetClassForm();
+
 
       message.textContent =
         "";
@@ -1295,19 +764,24 @@
     subjectSelect.value =
       "";
 
+
     courseSelect.innerHTML =
       '<option value="">Select class</option>';
+
 
     courseSelectWrap.classList.add(
       "hidden"
     );
 
+
     customCourseWrap.classList.add(
       "hidden"
     );
 
+
     customCourse.value =
       "";
+
 
     addClassBtn.classList.add(
       "hidden"
@@ -1320,8 +794,10 @@
     const classes =
       getSavedClasses();
 
+
     savedClassesList.innerHTML =
       "";
+
 
     if (
       classes.length === 0
@@ -1334,9 +810,11 @@
       return;
     }
 
+
     savedClassesPanel.classList.remove(
       "hidden"
     );
+
 
     classes.forEach(
       (course, index) => {
@@ -1346,62 +824,78 @@
             "div"
           );
 
+
         row.className =
           "saved-class-row";
+
 
         const info =
           document.createElement(
             "div"
           );
 
+
         info.className =
           "saved-class-info";
+
 
         const name =
           document.createElement(
             "span"
           );
 
+
         name.className =
           "saved-class-name";
 
+
         name.textContent =
           course.name;
+
 
         const subject =
           document.createElement(
             "span"
           );
 
+
         subject.className =
           "saved-class-subject";
 
+
         subject.textContent =
           course.subject;
+
 
         info.appendChild(
           name
         );
 
+
         info.appendChild(
           subject
         );
 
-        const removeButton =
+
+        const remove =
           document.createElement(
             "button"
           );
 
-        removeButton.type =
+
+        remove.type =
           "button";
 
-        removeButton.className =
-          "secondary";
 
-        removeButton.textContent =
+        remove.className =
+          "secondary small";
+
+
+        remove.textContent =
           "Remove";
 
-        removeButton.addEventListener(
+
+        remove.addEventListener(
           "click",
           () => {
 
@@ -1411,13 +905,16 @@
           }
         );
 
+
         row.appendChild(
           info
         );
 
+
         row.appendChild(
-          removeButton
+          remove
         );
+
 
         savedClassesList.appendChild(
           row
@@ -1432,16 +929,20 @@
     const classes =
       getSavedClasses();
 
+
     classes.splice(
       index,
       1
     );
 
+
     saveClassList(
       classes
     );
 
+
     renderSavedClasses();
+
 
     renderStudyClassButtons();
   }
@@ -1452,11 +953,6 @@
     () => {
 
       resetClassForm();
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-      });
     }
   );
 
@@ -1476,6 +972,7 @@
         return;
       }
 
+
       showStudyHome();
     }
   );
@@ -1491,7 +988,7 @@
 
 
   // ==========================================
-  // CLASS SELECTION FOR STUDY
+  // STUDY CLASS SELECTION
   // ==========================================
 
   function renderStudyClassButtons() {
@@ -1499,8 +996,10 @@
     const classes =
       getSavedClasses();
 
+
     studyClassButtons.innerHTML =
       "";
+
 
     classes.forEach(
       course => {
@@ -1510,31 +1009,39 @@
             "button"
           );
 
+
         button.type =
           "button";
 
+
         button.className =
           "class-button";
+
 
         const name =
           document.createElement(
             "strong"
           );
 
+
         name.textContent =
           course.name;
+
 
         const subject =
           document.createElement(
             "span"
           );
 
+
         subject.textContent =
           course.subject;
+
 
         button.appendChild(
           name
         );
+
 
         button.appendChild(
           subject
@@ -1549,13 +1056,6 @@
               course;
 
 
-            /*
-              If student arrived here from
-              the Anki reminder, selecting
-              their class immediately opens
-              Stage 3 → Anki.
-            */
-
             if (
               pendingAnkiLaunch
             ) {
@@ -1563,12 +1063,15 @@
               pendingAnkiLaunch =
                 false;
 
+
               selectedStage =
                 3;
+
 
               openTimer(
                 "Anki"
               );
+
 
               return;
             }
@@ -1593,29 +1096,36 @@
       "hidden"
     );
 
+
     stagePanel.classList.remove(
       "hidden"
     );
 
+
     selectedClassName.textContent =
       selectedClass.name;
+
 
     methodPanel.classList.add(
       "hidden"
     );
 
+
     selectedStage =
       null;
+
 
     document
       .querySelectorAll(
         ".stage-card"
       )
       .forEach(
-        card =>
+        card => {
+
           card.classList.remove(
             "selected"
-          )
+          );
+        }
       );
   }
 
@@ -1627,23 +1137,29 @@
       selectedClass =
         null;
 
+
       selectedStage =
         null;
 
+
       pendingAnkiLaunch =
         false;
+
 
       stagePanel.classList.add(
         "hidden"
       );
 
+
       methodPanel.classList.add(
         "hidden"
       );
 
+
       studyClassPanel.classList.remove(
         "hidden"
       );
+
 
       renderAnkiReminder();
     }
@@ -1670,20 +1186,25 @@
                 button.dataset.stage
               );
 
+
             document
               .querySelectorAll(
                 ".stage-card"
               )
               .forEach(
-                card =>
+                card => {
+
                   card.classList.remove(
                     "selected"
-                  )
+                  );
+                }
               );
+
 
             button.classList.add(
               "selected"
             );
+
 
             renderMethods(
               selectedStage
@@ -1703,17 +1224,21 @@
         stageNumber
       ];
 
+
     methodTitle.textContent =
       "Stage " +
       stageNumber +
       " — " +
       stage.name;
 
+
     methodPurpose.textContent =
       stage.purpose;
 
+
     methodButtons.innerHTML =
       "";
+
 
     stage.methods.forEach(
       method => {
@@ -1723,11 +1248,14 @@
             "button"
           );
 
+
         button.type =
           "button";
 
+
         button.textContent =
           method;
+
 
         button.addEventListener(
           "click",
@@ -1739,11 +1267,13 @@
           }
         );
 
+
         methodButtons.appendChild(
           button
         );
       }
     );
+
 
     methodPanel.classList.remove(
       "hidden"
@@ -1755,24 +1285,27 @@
   // MAIN TIMER
   // ==========================================
 
-  function openTimer(
-    method
-  ) {
+  function openTimer(method) {
 
     selectedMethod =
       method;
 
+
     elapsedSeconds =
       0;
+
 
     timerStartedAt =
       null;
 
+
     timerDisplay.textContent =
       "00:00";
 
+
     timerClass.textContent =
       selectedClass.name;
+
 
     timerStage.textContent =
       "Stage " +
@@ -1782,60 +1315,54 @@
         selectedStage
       ].name;
 
+
     timerMethod.textContent =
       method;
+
 
     timerInstruction.textContent =
       stages[
         selectedStage
       ].instruction;
 
+
     startBtn.classList.remove(
       "hidden"
     );
+
 
     pauseBtn.classList.add(
       "hidden"
     );
 
+
     finishBtn.classList.add(
       "hidden"
     );
 
+
     pauseBtn.textContent =
       "Pause";
+
 
     studyClassPanel.classList.add(
       "hidden"
     );
 
+
     stagePanel.classList.add(
       "hidden"
     );
 
-    methodPanel.classList.add(
-      "hidden"
-    );
 
     timerPanel.classList.remove(
       "hidden"
     );
 
 
-    const ankiReminderCard =
-      document.getElementById(
-        "ankiReminderCard"
-      );
-
-
-    if (
-      ankiReminderCard
-    ) {
-
-      ankiReminderCard.classList.add(
-        "hidden"
-      );
-    }
+    ankiReminderCard.classList.add(
+      "hidden"
+    );
   }
 
 
@@ -1843,6 +1370,7 @@
 
     let total =
       elapsedSeconds;
+
 
     if (
       timerStartedAt
@@ -1854,6 +1382,7 @@
           timerStartedAt
         ) / 1000;
     }
+
 
     timerDisplay.textContent =
       formatTimer(
@@ -1874,9 +1403,11 @@
           timerStartedAt
         ) / 1000;
 
+
       timerStartedAt =
         null;
     }
+
 
     if (
       timerInterval
@@ -1886,9 +1417,11 @@
         timerInterval
       );
 
+
       timerInterval =
         null;
     }
+
 
     updateTimer();
   }
@@ -1901,19 +1434,23 @@
       timerStartedAt =
         Date.now();
 
+
       timerInterval =
         setInterval(
           updateTimer,
           250
         );
 
+
       startBtn.classList.add(
         "hidden"
       );
 
+
       pauseBtn.classList.remove(
         "hidden"
       );
+
 
       finishBtn.classList.remove(
         "hidden"
@@ -1932,6 +1469,7 @@
 
         stopTimer();
 
+
         pauseBtn.textContent =
           "Resume";
 
@@ -1940,11 +1478,13 @@
         timerStartedAt =
           Date.now();
 
+
         timerInterval =
           setInterval(
             updateTimer,
             250
           );
+
 
         pauseBtn.textContent =
           "Pause";
@@ -1959,14 +1499,17 @@
 
       stopTimer();
 
+
       completedStudySeconds =
         Math.floor(
           elapsedSeconds
         );
 
+
       timerPanel.classList.add(
         "hidden"
       );
+
 
       if (
         selectedStage === 2
@@ -1978,6 +1521,7 @@
 
         completedCrosscheckSeconds =
           0;
+
 
         saveCompletedStage();
       }
@@ -1994,26 +1538,33 @@
     crosscheckElapsed =
       0;
 
+
     crosscheckStartedAt =
       null;
 
+
     crosscheckDisplay.textContent =
       "00:00";
+
 
     crosscheckStartBtn.classList.remove(
       "hidden"
     );
 
+
     crosscheckPauseBtn.classList.add(
       "hidden"
     );
+
 
     crosscheckFinishBtn.classList.add(
       "hidden"
     );
 
+
     crosscheckPauseBtn.textContent =
       "Pause";
+
 
     crosscheckPanel.classList.remove(
       "hidden"
@@ -2026,6 +1577,7 @@
     let total =
       crosscheckElapsed;
 
+
     if (
       crosscheckStartedAt
     ) {
@@ -2036,6 +1588,7 @@
           crosscheckStartedAt
         ) / 1000;
     }
+
 
     crosscheckDisplay.textContent =
       formatTimer(
@@ -2056,9 +1609,11 @@
           crosscheckStartedAt
         ) / 1000;
 
+
       crosscheckStartedAt =
         null;
     }
+
 
     if (
       crosscheckInterval
@@ -2068,9 +1623,11 @@
         crosscheckInterval
       );
 
+
       crosscheckInterval =
         null;
     }
+
 
     updateCrosscheckTimer();
   }
@@ -2083,19 +1640,23 @@
       crosscheckStartedAt =
         Date.now();
 
+
       crosscheckInterval =
         setInterval(
           updateCrosscheckTimer,
           250
         );
 
+
       crosscheckStartBtn.classList.add(
         "hidden"
       );
 
+
       crosscheckPauseBtn.classList.remove(
         "hidden"
       );
+
 
       crosscheckFinishBtn.classList.remove(
         "hidden"
@@ -2114,6 +1675,7 @@
 
         stopCrosscheckTimer();
 
+
         crosscheckPauseBtn.textContent =
           "Resume";
 
@@ -2122,11 +1684,13 @@
         crosscheckStartedAt =
           Date.now();
 
+
         crosscheckInterval =
           setInterval(
             updateCrosscheckTimer,
             250
           );
+
 
         crosscheckPauseBtn.textContent =
           "Pause";
@@ -2141,14 +1705,17 @@
 
       stopCrosscheckTimer();
 
+
       completedCrosscheckSeconds =
         Math.floor(
           crosscheckElapsed
         );
 
+
       crosscheckPanel.classList.add(
         "hidden"
       );
+
 
       saveCompletedStage();
     }
@@ -2156,7 +1723,7 @@
 
 
   // ==========================================
-  // SAVE COMPLETED STAGE
+  // SAVE SESSION
   // ==========================================
 
   function saveCompletedStage() {
@@ -2199,26 +1766,16 @@
     const rows =
       getSessions();
 
+
     rows.push(
       record
     );
+
 
     saveSessions(
       rows
     );
 
-
-    /*
-      IMPORTANT:
-
-      Completing Stage 3 → Anki clears
-      one outstanding Monday/Thursday
-      Anki requirement.
-
-      This works whether Anki was started
-      from the reminder OR selected manually
-      through the normal Stage 3 menu.
-    */
 
     if (
       selectedStage === 3 &&
@@ -2262,7 +1819,7 @@
 
 
   // ==========================================
-  // AFTER STAGE
+  // AFTER SESSION
   // ==========================================
 
   anotherStageBtn.addEventListener(
@@ -2272,6 +1829,7 @@
       completePanel.classList.add(
         "hidden"
       );
+
 
       openStageSelection();
     }
@@ -2286,33 +1844,33 @@
         "hidden"
       );
 
+
       selectedClass =
         null;
+
 
       selectedStage =
         null;
 
+
       selectedMethod =
         "";
+
 
       pendingAnkiLaunch =
         false;
 
-      stagePanel.classList.add(
-        "hidden"
-      );
-
-      methodPanel.classList.add(
-        "hidden"
-      );
 
       studyClassPanel.classList.remove(
         "hidden"
       );
 
+
       renderStudyClassButtons();
 
+
       renderAnkiReminder();
+
 
       message.textContent =
         "Study session saved.";
@@ -2321,12 +1879,10 @@
 
 
   // ==========================================
-  // TIME HELPERS
+  // TIMER HELPERS
   // ==========================================
 
-  function formatTimer(
-    seconds
-  ) {
+  function formatTimer(seconds) {
 
     const total =
       Math.max(
@@ -2336,13 +1892,16 @@
         )
       );
 
+
     const minutes =
       Math.floor(
         total / 60
       );
 
+
     const secs =
       total % 60;
+
 
     return (
       String(
@@ -2362,9 +1921,7 @@
   }
 
 
-  function humanTime(
-    seconds
-  ) {
+  function humanTime(seconds) {
 
     const minutes =
       Math.round(
@@ -2372,6 +1929,7 @@
           seconds || 0
         ) / 60
       );
+
 
     if (
       minutes < 60
@@ -2383,13 +1941,16 @@
       );
     }
 
+
     const hours =
       Math.floor(
         minutes / 60
       );
 
+
     const remaining =
       minutes % 60;
+
 
     if (
       remaining === 0
@@ -2401,6 +1962,7 @@
       );
     }
 
+
     return (
       hours +
       " hr " +
@@ -2408,6 +1970,339 @@
       " min"
     );
   }
+
+
+  // ==========================================
+  // ANKI REMINDERS
+  // Monday + Thursday
+  // ==========================================
+
+  function localDateKey(
+    date = new Date()
+  ) {
+
+    const year =
+      date.getFullYear();
+
+
+    const month =
+      String(
+        date.getMonth() + 1
+      ).padStart(
+        2,
+        "0"
+      );
+
+
+    const day =
+      String(
+        date.getDate()
+      ).padStart(
+        2,
+        "0"
+      );
+
+
+    return (
+      year +
+      "-" +
+      month +
+      "-" +
+      day
+    );
+  }
+
+
+  function isAnkiDay(date) {
+
+    return (
+      date.getDay() === 1 ||
+      date.getDay() === 4
+    );
+  }
+
+
+  function isAnkiDone(dateKey) {
+
+    return (
+      localStorage.getItem(
+        ANKI_DONE_PREFIX +
+        dateKey
+      ) === "1"
+    );
+  }
+
+
+  function markAnkiDone(dateKey) {
+
+    localStorage.setItem(
+      ANKI_DONE_PREFIX +
+      dateKey,
+      "1"
+    );
+  }
+
+
+  function getOutstandingAnkiDays() {
+
+    const today =
+      new Date();
+
+
+    today.setHours(
+      12,
+      0,
+      0,
+      0
+    );
+
+
+    const monday =
+      new Date(
+        today
+      );
+
+
+    const currentDay =
+      today.getDay();
+
+
+    const daysSinceMonday =
+      currentDay === 0
+        ? 6
+        : currentDay - 1;
+
+
+    monday.setDate(
+      today.getDate() -
+      daysSinceMonday
+    );
+
+
+    const missing =
+      [];
+
+
+    const cursor =
+      new Date(
+        monday
+      );
+
+
+    while (
+      cursor <= today
+    ) {
+
+      if (
+        isAnkiDay(
+          cursor
+        )
+      ) {
+
+        const key =
+          localDateKey(
+            cursor
+          );
+
+
+        if (
+          !isAnkiDone(
+            key
+          )
+        ) {
+
+          missing.push({
+
+            date:
+              new Date(
+                cursor
+              ),
+
+            dateKey:
+              key
+
+          });
+        }
+      }
+
+
+      cursor.setDate(
+        cursor.getDate() +
+        1
+      );
+    }
+
+
+    return missing;
+  }
+
+
+  function completeAnkiRequirement() {
+
+    const missing =
+      getOutstandingAnkiDays();
+
+
+    if (
+      missing.length === 0
+    ) {
+
+      return;
+    }
+
+
+    markAnkiDone(
+      missing[0]
+        .dateKey
+    );
+  }
+
+
+  function renderAnkiReminder() {
+
+    ankiReminderCard.classList.add(
+      "hidden"
+    );
+
+
+    if (
+      getSavedClasses()
+        .length === 0
+    ) {
+
+      return;
+    }
+
+
+    const todayKey =
+      localDateKey();
+
+
+    if (
+      localStorage.getItem(
+        ANKI_DISMISS_PREFIX +
+        todayKey
+      ) === "1"
+    ) {
+
+      return;
+    }
+
+
+    const missing =
+      getOutstandingAnkiDays();
+
+
+    if (
+      missing.length === 0
+    ) {
+
+      return;
+    }
+
+
+    const requirement =
+      missing[0];
+
+
+    if (
+      requirement.dateKey ===
+      todayKey
+    ) {
+
+      ankiReminderTitle.textContent =
+        "Anki due today";
+
+
+      ankiReminderText.textContent =
+        "Complete one Anki session today.";
+
+    } else {
+
+      const dayName =
+        requirement.date
+          .toLocaleDateString(
+            undefined,
+            {
+              weekday:
+                "long"
+            }
+          );
+
+
+      ankiReminderTitle.textContent =
+        "Anki make-up session due";
+
+
+      ankiReminderText.textContent =
+        "You missed your " +
+        dayName +
+        " Anki session. Complete one session when you can.";
+    }
+
+
+    ankiReminderCard.classList.remove(
+      "hidden"
+    );
+  }
+
+
+  ankiReminderStartBtn.addEventListener(
+    "click",
+    () => {
+
+      pendingAnkiLaunch =
+        true;
+
+
+      selectedClass =
+        null;
+
+
+      studyClassPanel.classList.remove(
+        "hidden"
+      );
+
+
+      stagePanel.classList.add(
+        "hidden"
+      );
+
+
+      methodPanel.classList.add(
+        "hidden"
+      );
+
+
+      renderStudyClassButtons();
+
+
+      message.textContent =
+        "Choose the class for your Anki session.";
+    }
+  );
+
+
+  ankiReminderDismissBtn.addEventListener(
+    "click",
+    () => {
+
+      const todayKey =
+        localDateKey();
+
+
+      localStorage.setItem(
+        ANKI_DISMISS_PREFIX +
+        todayKey,
+        "1"
+      );
+
+
+      ankiReminderCard.classList.add(
+        "hidden"
+      );
+    }
+  );
 
 
   // ==========================================
@@ -2423,16 +2318,19 @@
         date
       );
 
+
     const day =
       (
         result.getDay() +
         6
       ) % 7;
 
+
     result.setDate(
       result.getDate() -
       day
     );
+
 
     result.setHours(
       0,
@@ -2441,40 +2339,15 @@
       0
     );
 
+
     return result;
   }
 
 
-  function weekKey(
-    date
-  ) {
+  function weekKey(date) {
 
-    const year =
-      date.getFullYear();
-
-    const month =
-      String(
-        date.getMonth() +
-        1
-      ).padStart(
-        2,
-        "0"
-      );
-
-    const day =
-      String(
-        date.getDate()
-      ).padStart(
-        2,
-        "0"
-      );
-
-    return (
-      year +
-      "-" +
-      month +
-      "-" +
-      day
+    return localDateKey(
+      date
     );
   }
 
@@ -2488,10 +2361,12 @@
     const start =
       getMonday();
 
+
     const end =
       new Date(
         start
       );
+
 
     end.setDate(
       end.getDate() +
@@ -2508,6 +2383,7 @@
               new Date(
                 row.timestamp
               );
+
 
             return (
               timestamp >= start &&
@@ -2561,6 +2437,7 @@
 
         summary.totalSeconds +=
           row.totalSeconds || 0;
+
 
         summary.studyDays.add(
           row.timestamp.slice(
@@ -2648,7 +2525,7 @@
 
 
   // ==========================================
-  // WEEKLY PROGRESS
+  // PROGRESS SCREEN
   // ==========================================
 
   progressBtn.addEventListener(
@@ -2664,21 +2541,7 @@
     "click",
     () => {
 
-      progressScreen.classList.add(
-        "hidden"
-      );
-
-      if (
-        getSavedClasses()
-          .length === 0
-      ) {
-
-        showClassManager();
-
-      } else {
-
-        showStudyHome();
-      }
+      showStudyHome();
     }
   );
 
@@ -2693,11 +2556,18 @@
       "hidden"
     );
 
+
     studyScreen.classList.add(
       "hidden"
     );
 
+
     progressScreen.classList.remove(
+      "hidden"
+    );
+
+
+    progressBtn.classList.add(
       "hidden"
     );
 
@@ -2707,8 +2577,10 @@
         summary.totalSeconds
       );
 
+
     weeklyStages.textContent =
       summary.stageCount;
+
 
     weeklyDays.textContent =
       summary.studyDays;
@@ -2721,15 +2593,13 @@
 
     renderRanking(
       classBreakdown,
-      summary.classes,
-      true
+      summary.classes
     );
 
 
     renderRanking(
       methodBreakdown,
-      summary.methods,
-      true
+      summary.methods
     );
 
 
@@ -2747,7 +2617,7 @@
       "";
 
 
-    const rows = [
+    const items = [
 
       {
         name:
@@ -2796,7 +2666,7 @@
     ];
 
 
-    rows.forEach(
+    items.forEach(
       item => {
 
         const percent =
@@ -2831,14 +2701,15 @@
 
             <div
               class="bar-fill ${item.css}"
-              style="width:${percent}%"
-            ></div>
+              style="width:${percent}%">
+            </div>
 
           </div>
 
           <strong>
             ${percent}%
           </strong>
+
         `;
 
 
@@ -2852,8 +2723,7 @@
 
   function renderRanking(
     element,
-    data,
-    showTime
+    data
   ) {
 
     element.innerHTML =
@@ -2898,6 +2768,7 @@
             "div"
           );
 
+
         row.className =
           "list-row";
 
@@ -2906,6 +2777,7 @@
           document.createElement(
             "span"
           );
+
 
         left.textContent =
           name;
@@ -2916,17 +2788,17 @@
             "strong"
           );
 
+
         right.textContent =
-          showTime
-            ? humanTime(
-                value
-              )
-            : value;
+          humanTime(
+            value
+          );
 
 
         row.appendChild(
           left
         );
+
 
         row.appendChild(
           right
@@ -2968,6 +2840,7 @@
         ).toLocaleString() +
         ".";
 
+
       submitWeekBtn.textContent =
         "Update Weekly Summary";
 
@@ -2975,6 +2848,7 @@
 
       submissionStatus.textContent =
         "This week has not been shared yet.";
+
 
       submitWeekBtn.textContent =
         "Share Weekly Summary";
@@ -2984,10 +2858,7 @@
 
   submitWeekBtn.addEventListener(
     "click",
-    () => {
-
-      submitWeeklySummary();
-    }
+    submitWeeklySummary
   );
 
 
@@ -3033,11 +2904,14 @@
     form.method =
       "POST";
 
+
     form.action =
       endpoint;
 
+
     form.target =
       "submissionFrame";
+
 
     form.className =
       "hidden";
@@ -3103,14 +2977,18 @@
             "input"
           );
 
+
         input.type =
           "hidden";
+
 
         input.name =
           key;
 
+
         input.value =
           value;
+
 
         form.appendChild(
           input
@@ -3161,23 +3039,32 @@
 
   function showClassManager() {
 
-    pendingAnkiLaunch =
-      false;
-
-    progressScreen.classList.add(
-      "hidden"
-    );
-
-    studyScreen.classList.add(
-      "hidden"
-    );
-
     classManagerScreen.classList.remove(
       "hidden"
     );
 
 
+    studyScreen.classList.add(
+      "hidden"
+    );
+
+
+    progressScreen.classList.add(
+      "hidden"
+    );
+
+
+    progressBtn.classList.add(
+      "hidden"
+    );
+
+
+    pendingAnkiLaunch =
+      false;
+
+
     renderSavedClasses();
+
 
     resetClassForm();
   }
@@ -3189,33 +3076,46 @@
       "hidden"
     );
 
+
     progressScreen.classList.add(
       "hidden"
     );
+
 
     studyScreen.classList.remove(
       "hidden"
     );
 
+
+    progressBtn.classList.remove(
+      "hidden"
+    );
+
+
     studyClassPanel.classList.remove(
       "hidden"
     );
+
 
     stagePanel.classList.add(
       "hidden"
     );
 
+
     methodPanel.classList.add(
       "hidden"
     );
+
 
     timerPanel.classList.add(
       "hidden"
     );
 
+
     crosscheckPanel.classList.add(
       "hidden"
     );
+
 
     completePanel.classList.add(
       "hidden"
@@ -3225,14 +3125,21 @@
     selectedClass =
       null;
 
+
     selectedStage =
       null;
+
 
     selectedMethod =
       "";
 
 
+    pendingAnkiLaunch =
+      false;
+
+
     renderStudyClassButtons();
+
 
     renderAnkiReminder();
   }
@@ -3244,24 +3151,9 @@
 
   function initialize() {
 
-    createAnkiReminderCard();
-
-
     const classes =
       getSavedClasses();
 
-
-    /*
-      FIRST VISIT:
-
-      No saved classes means student
-      MUST set up classes first.
-
-      FUTURE VISITS:
-
-      Saved classes exist, so app
-      goes directly to Study Home.
-    */
 
     if (
       classes.length === 0
@@ -3277,6 +3169,5 @@
 
 
   initialize();
-
 
 })();
