@@ -1,0 +1,1 @@
+window.STUDY_TRACKER_WEEKLY_ENDPOINT = "";
