@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+
+  <title>
+    Study System Dashboard
+  </title>
+
+
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  >
+
+</head>
+
+
+
+<body>
+
+
+<main class="app">
+
+
+  <header class="topbar">
+
+    <div>
+
+      <div class="eyebrow">
+        STUDY SYSTEM
+      </div>
+
+      <h1>
+        Weekly Group Dashboard
+      </h1>
+
+    </div>
+
+  </header>
+
+
+
+  <div class="card">
+
+
+    <label for="weekStart">
+
+      <strong>
+        Week starting
+      </strong>
+
+    </label>
+
+
+    <input
+      id="weekStart"
+      type="date"
+    >
+
+
+    <div
+      class="actions left button-space"
+    >
+
+
+      <button
+        id="loadBtn"
+        class="primary"
+        type="button"
+      >
+        Load Week
+      </button>
+
+
+      <button
+        id="exportBtn"
+        class="secondary"
+        type="button"
+      >
+        Export CSV
+      </button>
+
+
+    </div>
+
+  </div>
+
+
+
+  <div class="metric-grid">
+
+
+    <div class="metric-card">
+
+      <span>
+        Students Represented
+      </span>
+
+      <strong id="studentCount">
+        0
+      </strong>
+
+    </div>
+
+
+
+    <div class="metric-card">
+
+      <span>
+        Average Study Time
+      </span>
+
+      <strong id="averageTime">
+        0 min
+      </strong>
+
+    </div>
+
+
+
+    <div class="metric-card">
+
+      <span>
+        Average Study Days
+      </span>
+
+      <strong id="averageDays">
+        0
+      </strong>
+
+    </div>
+
+
+  </div>
+
+
+
+  <div class="card">
+
+    <h2>
+      Average Time by Stage
+    </h2>
+
+    <div id="stageAverages"></div>
+
+  </div>
+
+
+
+  <div class="two-column">
+
+
+    <div class="card">
+
+      <h2>
+        Average Time by Class
+      </h2>
+
+      <div id="classAverages"></div>
+
+    </div>
+
+
+
+    <div class="card">
+
+      <h2>
+        Methods Used
+      </h2>
+
+      <p class="muted">
+        Percentage of weekly reports
+        that used each method at least once.
+      </p>
+
+      <div id="methodUsage"></div>
+
+    </div>
+
+
+  </div>
+
+
+
+  <div class="card">
+
+    <h2>
+      Weekly Summary
+    </h2>
+
+    <div id="summaryText"></div>
+
+  </div>
+
+
+
+  <p
+    id="adminMessage"
+    class="muted"
+  ></p>
+
+
+</main>
+
+
+<script src="admin-config.js"></script>
+
+<script src="admin.js"></script>
+
+
+</body>
+
+</html>
