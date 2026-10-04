@@ -3,32 +3,48 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <title>Study System Tracker</title>
+
   <link rel="stylesheet" href="styles.css?v=2">
 </head>
 
 <body>
+
   <main class="app">
 
     <header class="topbar">
+
       <div>
         <div class="eyebrow">STUDY SYSTEM</div>
         <h1>Study Tracker</h1>
       </div>
 
-      <button id="progressBtn" class="secondary hidden" type="button">
+      <button
+        id="progressBtn"
+        class="secondary hidden"
+        type="button">
         Weekly Progress
       </button>
+
     </header>
 
 
     <!-- CLASS SETUP -->
 
-    <section id="classManagerScreen" class="screen hidden">
+    <section
+      id="classManagerScreen"
+      class="screen hidden">
 
       <div class="card">
-        <div class="eyebrow">FIRST STEP</div>
-        <h2>Set up your classes</h2>
+
+        <div class="eyebrow">
+          FIRST STEP
+        </div>
+
+        <h2>
+          Set up your classes
+        </h2>
 
         <p class="muted">
           Add the classes you are taking.
@@ -36,46 +52,99 @@
           so you can use them for future study sessions.
         </p>
 
-        <label for="subjectSelect">Subject</label>
+
+        <label for="subjectSelect">
+          Subject
+        </label>
+
         <select id="subjectSelect">
-          <option value="">Select subject</option>
+
+          <option value="">
+            Select subject
+          </option>
+
           <option>Math</option>
           <option>Science</option>
           <option>English</option>
           <option>History / Social Science</option>
           <option>World Language</option>
           <option>Elective / CTE</option>
+
         </select>
 
-        <div id="courseSelectWrap" class="hidden">
-          <label for="courseSelect">Class</label>
+
+        <div
+          id="courseSelectWrap"
+          class="hidden">
+
+          <label for="courseSelect">
+            Class
+          </label>
+
           <select id="courseSelect">
-            <option value="">Select class</option>
+            <option value="">
+              Select class
+            </option>
           </select>
+
         </div>
 
-        <div id="customCourseWrap" class="hidden">
-          <label for="customCourse">Enter class name</label>
-          <input id="customCourse" type="text" placeholder="e.g. Marine Biology">
+
+        <div
+          id="customCourseWrap"
+          class="hidden">
+
+          <label for="customCourse">
+            Enter class name
+          </label>
+
+          <input
+            id="customCourse"
+            type="text"
+            placeholder="e.g. Marine Biology">
+
         </div>
 
-        <button id="addClassBtn" class="primary hidden" type="button">
+
+        <button
+          id="addClassBtn"
+          class="primary hidden"
+          type="button">
           Add Class
         </button>
+
       </div>
 
-      <div id="savedClassesPanel" class="card hidden">
-        <h2>Your Classes</h2>
+
+      <div
+        id="savedClassesPanel"
+        class="card hidden">
+
+        <h2>
+          Your Classes
+        </h2>
+
         <div id="savedClassesList"></div>
 
+
         <div class="actions">
-          <button id="addAnotherClassBtn" class="secondary" type="button">
+
+          <button
+            id="addAnotherClassBtn"
+            class="secondary"
+            type="button">
             Add Another Class
           </button>
-          <button id="doneAddingClassesBtn" class="primary" type="button">
+
+          <button
+            id="doneAddingClassesBtn"
+            class="primary"
+            type="button">
             Done Adding Classes
           </button>
+
         </div>
+
       </div>
 
     </section>
@@ -83,89 +152,187 @@
 
     <!-- STUDY HOME -->
 
-    <section id="studyScreen" class="screen hidden">
+    <section
+      id="studyScreen"
+      class="screen hidden">
+
 
       <!-- ANKI REMINDER -->
 
-      <div id="ankiReminderCard" class="card reminder hidden">
-        <div class="eyebrow">ANKI REMINDER</div>
-        <h2 id="ankiReminderTitle">Anki due</h2>
+      <div
+        id="ankiReminderCard"
+        class="card reminder hidden">
+
+        <div class="eyebrow">
+          ANKI REMINDER
+        </div>
+
+        <h2 id="ankiReminderTitle">
+          Anki due
+        </h2>
+
         <p id="ankiReminderText"></p>
 
+
         <div class="actions">
-          <button id="ankiReminderStartBtn" class="primary" type="button">
+
+          <button
+            id="ankiReminderStartBtn"
+            class="primary"
+            type="button">
             Start Anki Session
           </button>
-          <button id="ankiReminderDismissBtn" class="secondary" type="button">
+
+          <button
+            id="ankiReminderDismissBtn"
+            class="secondary"
+            type="button">
             Hide for Today
           </button>
+
         </div>
+
       </div>
 
 
       <!-- CLASS CHOICE -->
 
-      <div id="studyClassPanel" class="card">
+      <div
+        id="studyClassPanel"
+        class="card">
+
         <div class="section-heading">
+
           <div>
-            <div class="eyebrow">START A STUDY SESSION</div>
-            <h2>Choose your class</h2>
+
+            <div class="eyebrow">
+              START A STUDY SESSION
+            </div>
+
+            <h2>
+              Choose your class
+            </h2>
+
           </div>
 
-          <button id="editClassesBtn" class="secondary small" type="button">
+
+          <button
+            id="editClassesBtn"
+            class="secondary small"
+            type="button">
             Edit Classes
           </button>
+
         </div>
 
-        <div id="studyClassButtons" class="class-grid"></div>
+
+        <div
+          id="studyClassButtons"
+          class="class-grid">
+        </div>
+
       </div>
 
 
       <!-- STAGE CHOICE -->
 
-      <div id="stagePanel" class="hidden">
+      <div
+        id="stagePanel"
+        class="hidden">
+
         <div class="card">
 
           <div class="section-heading">
+
             <div>
-              <div class="eyebrow">STUDYING</div>
+
+              <div class="eyebrow">
+                STUDYING
+              </div>
+
               <h2 id="selectedClassName"></h2>
+
             </div>
 
-            <button id="changeClassBtn" class="secondary small" type="button">
+
+            <button
+              id="changeClassBtn"
+              class="secondary small"
+              type="button">
               Change Class
             </button>
+
           </div>
 
-          <h3>Choose your stage</h3>
+
+          <h3>
+            Choose your stage
+          </h3>
+
 
           <div class="stage-grid">
 
-            <button class="stage-card" data-stage="1" type="button">
-              <span class="stage-number">Stage 1</span>
-              <strong>Learn</strong>
+
+            <button
+              class="stage-card"
+              data-stage="1"
+              type="button">
+
+              <span class="stage-number">
+                Stage 1
+              </span>
+
+              <strong>
+                Learn
+              </strong>
+
               <span>
                 Build or rebuild your understanding
                 using your learning materials.
               </span>
+
             </button>
 
-            <button class="stage-card" data-stage="2" type="button">
-              <span class="stage-number">Stage 2</span>
-              <strong>Retrieval</strong>
+
+            <button
+              class="stage-card"
+              data-stage="2"
+              type="button">
+
+              <span class="stage-number">
+                Stage 2
+              </span>
+
+              <strong>
+                Retrieval
+              </strong>
+
               <span>
                 Put materials away and see what you
                 can teach or produce from memory.
               </span>
+
             </button>
 
-            <button class="stage-card" data-stage="3" type="button">
-              <span class="stage-number">Stage 3</span>
-              <strong>Assess</strong>
+
+            <button
+              class="stage-card"
+              data-stage="3"
+              type="button">
+
+              <span class="stage-number">
+                Stage 3
+              </span>
+
+              <strong>
+                Assess
+              </strong>
+
               <span>
                 Test what you can do independently
                 without help.
               </span>
+
             </button>
 
           </div>
@@ -173,80 +340,178 @@
 
           <!-- METHODS -->
 
-          <div id="methodPanel" class="method-panel hidden">
+          <div
+            id="methodPanel"
+            class="method-panel hidden">
+
             <h3 id="methodTitle"></h3>
-            <p id="methodPurpose" class="muted"></p>
-            <div id="methodButtons" class="method-grid"></div>
+
+            <p
+              id="methodPurpose"
+              class="muted">
+            </p>
+
+            <div
+              id="methodButtons"
+              class="method-grid">
+            </div>
+
           </div>
 
         </div>
+
       </div>
 
 
       <!-- STUDY TIMER -->
 
-      <div id="timerPanel" class="card timer-card hidden">
-        <div id="timerClass" class="eyebrow"></div>
-        <h2 id="timerStage"></h2>
-        <div id="timerMethod" class="timer-method"></div>
-        <p id="timerInstruction" class="muted"></p>
+      <div
+        id="timerPanel"
+        class="card timer-card hidden">
 
-        <div id="timerDisplay" class="timer-display">00:00</div>
+        <div
+          id="timerClass"
+          class="eyebrow">
+        </div>
+
+        <h2 id="timerStage"></h2>
+
+        <div
+          id="timerMethod"
+          class="timer-method">
+        </div>
+
+        <p
+          id="timerInstruction"
+          class="muted">
+        </p>
+
+
+        <div
+          id="timerDisplay"
+          class="timer-display">
+          00:00
+        </div>
+
 
         <div class="actions center">
-          <button id="startBtn" class="primary" type="button">Start</button>
-          <button id="pauseBtn" class="secondary hidden" type="button">Pause</button>
-          <button id="finishBtn" class="secondary hidden" type="button">Finish</button>
+
+          <button
+            id="startBtn"
+            class="primary"
+            type="button">
+            Start
+          </button>
+
+          <button
+            id="pauseBtn"
+            class="secondary hidden"
+            type="button">
+            Pause
+          </button>
+
+          <button
+            id="finishBtn"
+            class="secondary hidden"
+            type="button">
+            Finish
+          </button>
+
         </div>
+
       </div>
 
 
       <!-- CROSSCHECK TIMER -->
 
-      <div id="crosscheckPanel" class="card timer-card hidden">
-        <div class="eyebrow">STAGE 2 FOLLOW-UP</div>
-        <h2>Crosscheck</h2>
+      <div
+        id="crosscheckPanel"
+        class="card timer-card hidden">
+
+        <div class="eyebrow">
+          STAGE 2 FOLLOW-UP
+        </div>
+
+        <h2>
+          Crosscheck
+        </h2>
 
         <p>
           Compare what you produced from memory
           with your notes, textbook, or other course
-          materials.
-
-          Look for anything you missed,
+          materials. Look for anything you missed,
           misunderstood, or could not explain.
         </p>
 
-        <div id="crosscheckDisplay" class="timer-display">00:00</div>
+
+        <div
+          id="crosscheckDisplay"
+          class="timer-display">
+          00:00
+        </div>
+
 
         <div class="actions center">
-          <button id="crosscheckStartBtn" class="primary" type="button">
+
+          <button
+            id="crosscheckStartBtn"
+            class="primary"
+            type="button">
             Start Crosscheck
           </button>
-          <button id="crosscheckPauseBtn" class="secondary hidden" type="button">
+
+          <button
+            id="crosscheckPauseBtn"
+            class="secondary hidden"
+            type="button">
             Pause
           </button>
-          <button id="crosscheckFinishBtn" class="secondary hidden" type="button">
+
+          <button
+            id="crosscheckFinishBtn"
+            class="secondary hidden"
+            type="button">
             Finish Crosscheck
           </button>
+
         </div>
+
       </div>
 
 
-      <!-- COMPLETE -->
+      <!-- STAGE COMPLETE -->
 
-      <div id="completePanel" class="card hidden">
-        <div class="eyebrow">STAGE COMPLETE</div>
+      <div
+        id="completePanel"
+        class="card hidden">
+
+        <div class="eyebrow">
+          STAGE COMPLETE
+        </div>
+
         <h2 id="completeTitle"></h2>
+
         <p id="completeDetails"></p>
 
+
         <div class="actions">
-          <button id="anotherStageBtn" class="primary" type="button">
+
+          <button
+            id="anotherStageBtn"
+            class="primary"
+            type="button">
             Choose Another Stage
           </button>
-          <button id="finishStudyingBtn" class="secondary" type="button">
+
+          <button
+            id="finishStudyingBtn"
+            class="secondary"
+            type="button">
             Finish Studying
           </button>
+
         </div>
+
       </div>
 
     </section>
@@ -254,75 +519,159 @@
 
     <!-- WEEKLY PROGRESS -->
 
-    <section id="progressScreen" class="screen hidden">
+    <section
+      id="progressScreen"
+      class="screen hidden">
 
       <div class="card">
+
         <div class="section-heading">
+
           <div>
-            <div class="eyebrow">THIS WEEK</div>
-            <h2>Study Progress</h2>
+
+            <div class="eyebrow">
+              THIS WEEK
+            </div>
+
+            <h2>
+              Study Progress
+            </h2>
+
           </div>
 
-          <button id="backBtn" class="secondary small" type="button">
+
+          <button
+            id="backBtn"
+            class="secondary small"
+            type="button">
             Back
           </button>
+
         </div>
+
 
         <div class="stats-grid">
-          <div class="stat">
-            <span>Total Time</span>
-            <strong id="weeklyTotal">0 min</strong>
-          </div>
 
           <div class="stat">
-            <span>Stages Completed</span>
-            <strong id="weeklyStages">0</strong>
+
+            <span>
+              Total Time
+            </span>
+
+            <strong id="weeklyTotal">
+              0 min
+            </strong>
+
           </div>
 
+
           <div class="stat">
-            <span>Study Days</span>
-            <strong id="weeklyDays">0</strong>
+
+            <span>
+              Stages Completed
+            </span>
+
+            <strong id="weeklyStages">
+              0
+            </strong>
+
           </div>
+
+
+          <div class="stat">
+
+            <span>
+              Study Days
+            </span>
+
+            <strong id="weeklyDays">
+              0
+            </strong>
+
+          </div>
+
         </div>
+
       </div>
 
+
       <div class="card">
-        <h3>Time by Stage</h3>
+
+        <h3>
+          Time by Stage
+        </h3>
+
         <div id="stageBreakdown"></div>
+
       </div>
 
+
       <div class="card">
-        <h3>Classes</h3>
+
+        <h3>
+          Classes
+        </h3>
+
         <div id="classBreakdown"></div>
+
       </div>
 
+
       <div class="card">
-        <h3>Study Methods</h3>
+
+        <h3>
+          Study Methods
+        </h3>
+
         <div id="methodBreakdown"></div>
+
       </div>
 
-      <div class="card">
-        <h3>Share Weekly Summary</h3>
-        <p class="muted">Your weekly summary is submitted anonymously.</p>
 
-        <button id="submitWeekBtn" class="primary" type="button">
+      <div class="card">
+
+        <h3>
+          Share Weekly Summary
+        </h3>
+
+        <p class="muted">
+          Your weekly summary is submitted anonymously.
+        </p>
+
+        <button
+          id="submitWeekBtn"
+          class="primary"
+          type="button">
           Share Weekly Summary
         </button>
 
-        <p id="submissionStatus" class="muted status"></p>
+        <p
+          id="submissionStatus"
+          class="muted status">
+        </p>
+
       </div>
 
     </section>
 
 
-    <p id="message" class="message"></p>
+    <p
+      id="message"
+      class="message">
+    </p>
 
-    <iframe name="submissionFrame" class="hidden" title="submission frame"></iframe>
+
+    <iframe
+      name="submissionFrame"
+      class="hidden"
+      title="submission frame">
+    </iframe>
 
   </main>
 
 
   <script src="config.js?v=2"></script>
+
   <script src="app.js?v=2"></script>
 
 </body>
