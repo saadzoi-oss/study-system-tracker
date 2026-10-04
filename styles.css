@@ -4,6 +4,7 @@
   --text: #1f2937;
   --muted: #64748b;
   --border: #d7dce3;
+
   --accent: #2563eb;
   --accent-dark: #1d4ed8;
 
@@ -22,11 +23,8 @@
 body {
   margin: 0;
 
-  background:
-    var(--bg);
-
-  color:
-    var(--text);
+  background: var(--bg);
+  color: var(--text);
 
   font-family:
     system-ui,
@@ -50,11 +48,10 @@ button {
 
 
 .app {
-  width:
-    min(
-      900px,
-      calc(100% - 24px)
-    );
+  width: min(
+    900px,
+    calc(100% - 24px)
+  );
 
   margin:
     24px auto 60px;
@@ -93,98 +90,75 @@ h1 {
 
 
 .card {
-  background:
-    var(--card);
+  background: var(--card);
 
   border:
     1px solid
     var(--border);
 
-  border-radius:
-    16px;
+  border-radius: 16px;
 
-  padding:
-    20px;
+  padding: 20px;
 }
 
 
 .eyebrow {
-  font-size:
-    0.78rem;
+  font-size: 0.78rem;
+  font-weight: 800;
 
-  font-weight:
-    800;
+  color: var(--muted);
 
-  color:
-    var(--muted);
+  letter-spacing: 0.05em;
 
-  letter-spacing:
-    0.05em;
-
-  margin-bottom:
-    4px;
+  margin-bottom: 4px;
 }
 
 
 .muted {
-  color:
-    var(--muted);
+  color: var(--muted);
 }
 
 
 label {
   display: block;
 
-  font-weight:
-    700;
+  font-weight: 700;
 
-  margin-top:
-    14px;
+  margin-top: 14px;
 }
 
 
 select,
 input {
-  width:
-    100%;
+  width: 100%;
 
-  min-height:
-    46px;
+  min-height: 46px;
 
-  margin-top:
-    6px;
+  margin-top: 6px;
 
-  padding:
-    10px 12px;
+  padding: 10px 12px;
 
   border:
     1px solid
     var(--border);
 
-  border-radius:
-    10px;
+  border-radius: 10px;
 
-  background:
-    #ffffff;
+  background: #ffffff;
 
-  color:
-    var(--text);
+  color: var(--text);
 }
 
 
 .primary,
 .secondary {
-  border-radius:
-    10px;
+  border-radius: 10px;
 
-  min-height:
-    44px;
+  min-height: 44px;
 
-  padding:
-    10px 16px;
+  padding: 10px 16px;
 
-  font-weight:
-    700;
+  font-weight: 700;
 }
 
 
@@ -196,8 +170,7 @@ input {
   background:
     var(--accent);
 
-  color:
-    white;
+  color: white;
 }
 
 
@@ -212,8 +185,7 @@ input {
     1px solid
     var(--border);
 
-  background:
-    #ffffff;
+  background: #ffffff;
 
   color:
     var(--text);
@@ -221,108 +193,84 @@ input {
 
 
 .small {
-  min-height:
-    38px;
+  min-height: 38px;
 
-  padding:
-    7px 12px;
+  padding: 7px 12px;
 
-  font-size:
-    0.9rem;
+  font-size: 0.9rem;
 }
 
 
 .actions {
-  display:
-    flex;
+  display: flex;
 
-  flex-wrap:
-    wrap;
+  flex-wrap: wrap;
 
-  gap:
-    10px;
+  gap: 10px;
 
-  margin-top:
-    16px;
+  margin-top: 16px;
 }
 
 
 .actions.center {
-  justify-content:
-    center;
+  justify-content: center;
 }
 
 
 .section-heading {
-  display:
-    flex;
+  display: flex;
 
-  justify-content:
-    space-between;
+  justify-content: space-between;
 
-  align-items:
-    flex-start;
+  align-items: flex-start;
 
-  gap:
-    14px;
+  gap: 14px;
 }
 
 
 .saved-class-row {
-  display:
-    flex;
+  display: flex;
 
-  justify-content:
-    space-between;
+  justify-content: space-between;
 
-  align-items:
-    center;
+  align-items: center;
 
-  gap:
-    14px;
+  gap: 14px;
 
   border-bottom:
     1px solid
     var(--border);
 
-  padding:
-    12px 0;
+  padding: 12px 0;
 }
 
 
 .saved-class-row:last-child {
-  border-bottom:
-    none;
+  border-bottom: none;
 }
 
 
 .saved-class-info {
-  display:
-    grid;
+  display: grid;
 
-  gap:
-    2px;
+  gap: 2px;
 }
 
 
 .saved-class-name {
-  font-weight:
-    750;
+  font-weight: 750;
 }
 
 
 .saved-class-subject {
-  color:
-    var(--muted);
+  color: var(--muted);
 
-  font-size:
-    0.9rem;
+  font-size: 0.9rem;
 }
 
 
 .class-grid {
-  display:
-    grid;
+  display: grid;
 
   grid-template-columns:
     repeat(
@@ -330,57 +278,45 @@ input {
       1fr
     );
 
-  gap:
-    12px;
+  gap: 12px;
 }
 
 
 .class-button {
-  display:
-    grid;
+  display: grid;
 
-  gap:
-    5px;
+  gap: 5px;
 
-  text-align:
-    left;
+  text-align: left;
 
   border:
     1px solid
     var(--border);
 
-  border-radius:
-    12px;
+  border-radius: 12px;
 
-  background:
-    #ffffff;
+  background: #ffffff;
 
-  color:
-    var(--text);
+  color: var(--text);
 
-  padding:
-    16px;
+  padding: 16px;
 }
 
 
 .class-button strong {
-  font-size:
-    1.05rem;
+  font-size: 1.05rem;
 }
 
 
 .class-button span {
-  color:
-    var(--muted);
+  color: var(--muted);
 
-  font-size:
-    0.9rem;
+  font-size: 0.9rem;
 }
 
 
 .stage-grid {
-  display:
-    grid;
+  display: grid;
 
   grid-template-columns:
     repeat(
@@ -388,42 +324,33 @@ input {
       1fr
     );
 
-  gap:
-    12px;
+  gap: 12px;
 }
 
 
 .stage-card {
-  display:
-    grid;
+  display: grid;
 
-  gap:
-    8px;
+  gap: 8px;
 
-  text-align:
-    left;
+  text-align: left;
 
   border:
     1px solid
     var(--border);
 
-  border-radius:
-    14px;
+  border-radius: 14px;
 
-  background:
-    #ffffff;
+  background: #ffffff;
 
-  color:
-    var(--text);
+  color: var(--text);
 
-  padding:
-    16px;
+  padding: 16px;
 }
 
 
 .stage-card strong {
-  font-size:
-    1.15rem;
+  font-size: 1.15rem;
 }
 
 
@@ -443,33 +370,27 @@ input {
 
 
 .stage-number {
-  color:
-    var(--muted);
+  color: var(--muted);
 
-  font-size:
-    0.8rem;
+  font-size: 0.8rem;
 
-  font-weight:
-    750;
+  font-weight: 750;
 }
 
 
 .method-panel {
-  margin-top:
-    20px;
+  margin-top: 20px;
 
   border-top:
     1px solid
     var(--border);
 
-  padding-top:
-    18px;
+  padding-top: 18px;
 }
 
 
 .method-grid {
-  display:
-    grid;
+  display: grid;
 
   grid-template-columns:
     repeat(
@@ -477,54 +398,43 @@ input {
       1fr
     );
 
-  gap:
-    10px;
+  gap: 10px;
 }
 
 
 .method-grid button {
-  min-height:
-    46px;
+  min-height: 46px;
 
-  text-align:
-    left;
+  text-align: left;
 
   border:
     1px solid
     var(--border);
 
-  border-radius:
-    10px;
+  border-radius: 10px;
 
-  background:
-    #ffffff;
+  background: #ffffff;
 
-  color:
-    var(--text);
+  color: var(--text);
 
-  padding:
-    11px 13px;
+  padding: 11px 13px;
 }
 
 
 .timer-card {
-  text-align:
-    center;
+  text-align: center;
 }
 
 
 .timer-method {
-  font-size:
-    1.15rem;
+  font-size: 1.15rem;
 
-  font-weight:
-    700;
+  font-weight: 700;
 }
 
 
 .timer-display {
-  margin:
-    30px 0;
+  margin: 30px 0;
 
   font-size:
     clamp(
@@ -533,11 +443,9 @@ input {
       7rem
     );
 
-  font-weight:
-    800;
+  font-weight: 800;
 
-  letter-spacing:
-    -0.06em;
+  letter-spacing: -0.06em;
 
   font-variant-numeric:
     tabular-nums;
@@ -552,8 +460,7 @@ input {
 
 
 .stats-grid {
-  display:
-    grid;
+  display: grid;
 
   grid-template-columns:
     repeat(
@@ -561,8 +468,7 @@ input {
       1fr
     );
 
-  gap:
-    12px;
+  gap: 12px;
 }
 
 
@@ -571,77 +477,59 @@ input {
     1px solid
     var(--border);
 
-  border-radius:
-    12px;
+  border-radius: 12px;
 
-  padding:
-    14px;
+  padding: 14px;
 }
 
 
 .stat span {
-  display:
-    block;
+  display: block;
 
-  color:
-    var(--muted);
+  color: var(--muted);
 
-  font-size:
-    0.85rem;
+  font-size: 0.85rem;
 }
 
 
 .stat strong {
-  display:
-    block;
+  display: block;
 
-  margin-top:
-    4px;
+  margin-top: 4px;
 
-  font-size:
-    1.2rem;
+  font-size: 1.2rem;
 }
 
 
 .bar-row {
-  display:
-    grid;
+  display: grid;
 
   grid-template-columns:
     90px 1fr 48px;
 
-  align-items:
-    center;
+  align-items: center;
 
-  gap:
-    10px;
+  gap: 10px;
 
-  margin:
-    12px 0;
+  margin: 12px 0;
 }
 
 
 .bar-track {
-  height:
-    12px;
+  height: 12px;
 
-  border-radius:
-    999px;
+  border-radius: 999px;
 
-  background:
-    #e5e7eb;
+  background: #e5e7eb;
 
-  overflow:
-    hidden;
+  overflow: hidden;
 }
 
 
 .bar-fill {
-  height:
-    100%;
+  height: 100%;
 
-  border-radius:
-    999px;
+  border-radius: 999px;
 }
 
 
@@ -670,17 +558,13 @@ input {
 
 
 .list-row {
-  display:
-    flex;
+  display: flex;
 
-  justify-content:
-    space-between;
+  justify-content: space-between;
 
-  gap:
-    12px;
+  gap: 12px;
 
-  padding:
-    9px 0;
+  padding: 9px 0;
 
   border-bottom:
     1px solid
@@ -689,32 +573,26 @@ input {
 
 
 .list-row:last-child {
-  border-bottom:
-    none;
+  border-bottom: none;
 }
 
 
 .message {
-  color:
-    var(--muted);
+  color: var(--muted);
 
-  margin-top:
-    16px;
+  margin-top: 16px;
 }
 
 
 .status {
-  margin-top:
-    12px;
+  margin-top: 12px;
 
-  margin-bottom:
-    0;
+  margin-bottom: 0;
 }
 
 
 .hidden {
-  display:
-    none !important;
+  display: none !important;
 }
 
 
@@ -745,5 +623,4 @@ input {
     grid-template-columns:
       75px 1fr 42px;
   }
-
 }
