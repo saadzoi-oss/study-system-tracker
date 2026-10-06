@@ -1417,6 +1417,174 @@ const StudyFollowup = (() => {
 })();
 
 
+/* Monthly keep-or-adjust review.
+   Built only from the weekly check-ins students already submit.
+   A week belongs to the month in which its Sunday falls. */
+
+const StudyMonthly = (() => {
+  const C = StudyCoach;
+  const F = StudyFollowup;
+
+  const labels = {
+    early: "Too early to tell",
+    tryFirst: "Try the step first",
+    change: "Change one thing",
+    keep: "Keep it"
+  };
+
+  const valid = r =>
+    r &&
+    [1, 2, 3, 4, 5].includes(Number(r.learningRating)) &&
+    typeof r.hadAssessment === "boolean";
+
+  const low = r =>
+    r.learningRating <= 2 ||
+    (r.hadAssessment && r.assessmentRating <= 2);
+
+  function review(name, monthStart, today, refs) {
+    const end = C.nextMonth(monthStart);
+    const weeks = [];
+
+    for (
+      let w = C.weekStart(monthStart);
+      w < end;
+      w = C.addDays(w, 7)
+    ) {
+      const sunday = C.addDays(w, 6);
+
+      if (
+        sunday >= monthStart &&
+        sunday < end &&
+        sunday <= today
+      ) {
+        weeks.push(w);
+      }
+    }
+
+    const rated = weeks
+      .map(w => refs[C.key(w, name)])
+      .filter(valid);
+
+    // Did the previous week's suggested step show up in this week's log?
+    let checked = 0;
+    let followed = 0;
+
+    rated.forEach(r => {
+      const prev = refs[
+        C.key(C.addDays(r.weekStart, -7), name)
+      ];
+
+      if (!prev || !prev.recommendation) return;
+
+      const plan = F.normalize(prev.recommendation);
+
+      if (plan.focus === "unobservable") return;
+
+      const m = F.metric(r.snapshot, plan.focus);
+
+      if (m.unknown && !m.visible) return;
+
+      checked++;
+
+      if (m.visible) followed++;
+    });
+
+    const out = {
+      complete: today >= end,
+      weeks: weeks.length,
+      rated: rated.length,
+      checked,
+      followed,
+
+      learning: rated.map(r =>
+        String(r.learningRating)
+      ),
+
+      tests: rated.map(r =>
+        r.hadAssessment
+          ? String(r.assessmentRating)
+          : "—"
+      ),
+
+      latest: rated[rated.length - 1] || null
+    };
+
+    const finish = (verdict, title, reason) =>
+      Object.assign(out, {
+        verdict,
+        label: labels[verdict],
+        title,
+        reason
+      });
+
+    if (rated.length < 3) {
+      return finish(
+        "early",
+        "Too early to judge this month",
+        "A monthly result needs at least 3 rated weeks; this class has " +
+        rated.length +
+        ". Keep answering the Sunday check-in and use the next step below."
+      );
+    }
+
+    if (checked < 2) {
+      return finish(
+        "early",
+        "Too early to judge this month",
+        "The suggested step could be checked in only " +
+        checked +
+        " week" + (checked === 1 ? "" : "s") +
+        " so far. Use the next step below and log each stage."
+      );
+    }
+
+    if (followed * 2 < checked) {
+      return finish(
+        "tryFirst",
+        "Try the suggested step before changing anything",
+        "The suggested step showed up in your log in " +
+        followed + " of " + checked +
+        " weeks. Your ratings can't show whether it helps until you use it."
+      );
+    }
+
+    const first = rated[0];
+    const last = out.latest;
+
+    const improved =
+      last.learningRating > first.learningRating ||
+      (
+        first.hadAssessment &&
+        last.hadAssessment &&
+        last.assessmentRating > first.assessmentRating
+      );
+
+    if (low(last) && !improved) {
+      return finish(
+        "change",
+        "Change one thing",
+        "You used the suggested step in " +
+        followed + " of " + checked +
+        " weeks, but your ratings stayed low. Keep what helps and " +
+        "change one part: the next step below."
+      );
+    }
+
+    return finish(
+      "keep",
+      "Keep it",
+      "You used the suggested step in " +
+      followed + " of " + checked +
+      " weeks and your ratings " +
+      (improved ? "improved" : "held steady") +
+      ". Keep going."
+    );
+  }
+
+  return { review };
+})();
+
+
 (() => {
   "use strict";
 
@@ -1906,6 +2074,94 @@ const StudyFollowup = (() => {
       more +
       '</details><p class="small">' +
       "Self-rated outcomes; the log cannot prove what caused a change." +
+      "</p></div>"
+    );
+  }
+
+  // One card per class on the Monthly screen.
+  // Shows how many rated weeks support the verdict
+  // and whether the month is still in progress.
+  function monthlyHtml(name, month) {
+    const m = StudyMonthly.review(
+      name,
+      month,
+      today(),
+      reflections()
+    );
+
+    const monthName = new Date(
+      month + "T12:00:00"
+    ).toLocaleDateString(
+      undefined,
+      { month: "long" }
+    );
+
+    const facts = [
+      m.complete
+        ? monthName
+        : monthName + " so far",
+
+      m.rated + " of " + m.weeks +
+      " week" + (m.weeks === 1 ? "" : "s") +
+      " rated"
+    ];
+
+    if (m.checked) {
+      facts.push(
+        "suggested step logged in " +
+        m.followed + " of " + m.checked
+      );
+    }
+
+    if (m.rated) {
+      facts.push(
+        "learning " + m.learning.join(" → ")
+      );
+    }
+
+    if (m.tests.some(t => t !== "—")) {
+      facts.push(
+        "tests " + m.tests.join(" → ")
+      );
+    }
+
+    const source =
+      m.latest ||
+      latestReflection(name, C.nextMonth(month));
+
+    const advice =
+      source && source.recommendation;
+
+    return (
+      '<div class="coach">' +
+      '<span class="eyebrow">THIS MONTH · ' +
+      esc(name) +
+      '</span><span class="badge">' +
+      esc(m.label) +
+      "</span><h3>" +
+      esc(m.title) +
+      '</h3><p class="small">' +
+      esc(facts.join(" · ")) +
+      "</p><p>" +
+      esc(m.reason) +
+      "</p>" +
+
+      (
+        advice
+          ? "<p><strong>Next step:</strong> " +
+            esc(advice.text) +
+            "</p>" +
+            '<button type="button" class="text-button" ' +
+            'data-coach-class="' +
+            esc(name) +
+            '" data-coach-stage="' +
+            Number(advice.targetStage || 2) +
+            '">Choose this next step →</button>'
+          : ""
+      ) +
+
+      '<p class="small">' +
+      "Built from your weekly check-ins. Self-rated, not grades." +
       "</p></div>"
     );
   }
@@ -2969,14 +3225,27 @@ const StudyFollowup = (() => {
         ref ||
         latestReflection(name, end);
 
-      html += displayed
-        ? feedbackHtml(displayed)
+      if (periodKind === "month") {
+        // Monthly verdict first; the latest weekly card stays one tap away.
+        html += monthlyHtml(name, periodKey);
 
-        : '<div class="coach"><h3>' +
-          esc(advice.title) +
-          "</h3><p>" +
-          esc(advice.text) +
-          "</p></div>";
+        if (displayed && displayed.recommendation) {
+          html +=
+            "<details><summary>Latest weekly comparison</summary>" +
+            feedbackHtml(displayed) +
+            "</details>";
+        }
+
+      } else {
+        html += displayed
+          ? feedbackHtml(displayed)
+
+          : '<div class="coach"><h3>' +
+            esc(advice.title) +
+            "</h3><p>" +
+            esc(advice.text) +
+            "</p></div>";
+      }
 
       html +=
         "<details><summary>Methods within each stage</summary>";
