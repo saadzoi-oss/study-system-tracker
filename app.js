@@ -1,5 +1,307 @@
-/* Study System coaching rules.
-   No external AI service or grade prediction. */
+/*
+ * Complete student app.
+ * Version: student-learning-first-20261009-3
+ *
+ * Learning feedback does not require an assessment rating.
+ * Existing storage keys, timers and submission workflow are retained.
+ */
+
+const CoachRules = (() => {
+  const version = "student-learning-first-20261009-3";
+
+  const methods = {
+    1: [
+      "Study / Review", "Textbook", "Video", "Concept Map",
+      "Worked Examples", "AI Tutor", "Unit Coach"
+    ],
+    2: [
+      "Teach", "Redo Notes from Memory",
+      "Concept Map from Memory", "AI — Teach & Check"
+    ],
+    3: [
+      "Homework as Test", "Practice Test", "Practice Problems",
+      "Anki", "AI Practice Test", "AI Game"
+    ]
+  };
+
+  const n = v =>
+    v !== null &&
+    v !== "" &&
+    v !== undefined &&
+    !(v instanceof Date) &&
+    typeof v !== "boolean" &&
+    Number.isFinite(Number(v)) &&
+    Number(v) >= 0
+      ? Number(v)
+      : null;
+
+  const z = v => n(v) ?? 0;
+
+  const rate = v =>
+    [1, 2, 3, 4, 5].includes(n(v))
+      ? Number(v)
+      : null;
+
+  const assessment = r =>
+    r && r.hadAssessment === true
+      ? rate(r.assessmentRating)
+      : null;
+
+  // A 3 is a middle response, not automatically a difficulty.
+  const concerns = r => !!r && (
+    (rate(r.learningRating) !== null && rate(r.learningRating) <= 2) ||
+    (assessment(r) !== null && assessment(r) <= 2)
+  );
+
+  const strong = r =>
+    !!r &&
+    rate(r.learningRating) >= 4 &&
+    (r.hadAssessment === false || assessment(r) >= 4);
+
+  const stage = (s, k) =>
+    s?.stages?.[k] || {
+      count: 0,
+      seconds: 0,
+      methods: {}
+    };
+
+  const entries = t =>
+    t.methods instanceof Map
+      ? [...t.methods.entries()]
+      : Object.entries(t.methods || {});
+
+  function enough(s) {
+    const positive =
+      n(s?.positive) ??
+      n(s?.behaviorEvidence?.positiveStages);
+
+    return !!s &&
+      [1, 2, 3].reduce(
+        (a, k) => a + z(stage(s, k).count), 0
+      ) >= 2 &&
+      [1, 2, 3].reduce(
+        (a, k) => a + z(stage(s, k).seconds), 0
+      ) > 0 &&
+      (positive === null || positive >= 2);
+  }
+
+  function issues(s, r) {
+    if (!enough(s) || strong(r)) return [];
+
+    const a = [
+      null,
+      stage(s, 1),
+      stage(s, 2),
+      stage(s, 3)
+    ];
+
+    const total = a.slice(1).reduce(
+      (v, t) => v + z(t.seconds), 0
+    );
+
+    const concern = concerns(r);
+    const result = [];
+
+    function add(
+      code, label, observed, text,
+      focus, targetStage, targetMethod, rank
+    ) {
+      result.push({
+        code,
+        title: label,
+        label,
+        observed,
+        text,
+        action: text,
+        focus,
+        targetStage,
+        targetMethod,
+        rank,
+        concern,
+        hasRating: !!r
+      });
+    }
+
+    if (
+      z(a[1].count) + z(a[3].count) > 0 &&
+      (
+        z(a[2].count) === 0 ||
+        (concern && z(a[2].seconds) / total < .15)
+      )
+    ) {
+      add(
+        "CONNECT_RETRIEVAL_ASSESS",
+        "Connect review with a memory check",
+        "Learn or Assess recorded with little or no separate Retrieval.",
+        "Try teaching or reconstructing from memory, Crosscheck, then a short Practice Test, problems, or Anki assessment in one visit.",
+        "cycle", 2, "Teach", 10
+      );
+    }
+
+    const cross =
+      n(s?.crossCount) ??
+      n(s?.checked);
+
+    if (
+      z(a[2].count) >= 2 &&
+      cross !== null &&
+      cross / z(a[2].count) < .8
+    ) {
+      add(
+        "LOG_CROSSCHECK",
+        "Check what you recalled",
+        "Some Retrieval stages have no Crosscheck time.",
+        "After Retrieval, compare your work with a reliable source. Correct one gap before moving on. Checking may also have happened without being logged.",
+        "crosscheck", 2, "Teach", 20
+      );
+    }
+
+    if (
+      r &&
+      rate(r.learningRating) >= 4 &&
+      assessment(r) !== null &&
+      assessment(r) <= 2
+    ) {
+      add(
+        "CHECK_CONFIDENCE",
+        "Check how your explanation transfers to questions",
+        "Learning feels clear, but the assessment rating is low.",
+        "Keep Retrieval and Crosscheck. Try a Practice Test or Practice Problems matching the questions you found difficult, without hints.",
+        "testCycle", 3, "Practice Test", 30
+      );
+    }
+
+    const anki = entries(a[3])
+      .find(x => /^anki$/i.test(x[0]))?.[1];
+
+    if (
+      assessment(r) !== null &&
+      assessment(r) <= 2 &&
+      z(a[3].count) >= 3 &&
+      anki &&
+      z(anki.count) / z(a[3].count) >= .65
+    ) {
+      add(
+        "MATCH_ASSESSMENT_TASK",
+        "Add practice that matches your assessment",
+        "Most Assess uses are Anki, alongside a low assessment rating.",
+        "Keep Anki for recall. After Retrieval and Crosscheck, add a Practice Test or problems resembling your actual assessment.",
+        "testCycle", 3, "Practice Test", 40
+      );
+    }
+
+    if (
+      z(a[2].count) > 0 &&
+      z(a[3].count) === 0
+    ) {
+      add(
+        "PAIR_RETRIEVAL_ASSESS",
+        "Try a short independent practice check",
+        "Retrieval is recorded, but no Assess practice is logged.",
+        "After Retrieval and Crosscheck, try a short independent practice test, problem set, or Anki assessment. An actual school test is not needed to do this practice.",
+        "cycle", 3, "Practice Test", 50
+      );
+    }
+
+    if (
+      concern &&
+      z(a[1].seconds) / total >= .5
+    ) {
+      add(
+        "TARGETED_RELEARN",
+        "Work through one example, then explain it",
+        "Much of the logged time is Learn, and you reported difficulty.",
+        "Work through one difficult Worked Example, then close your notes and explain it from memory. Crosscheck the step that was confusing.",
+        "exampleRecall", 1, "Worked Examples", 60
+      );
+    }
+
+    if (concern && !result.length) {
+      add(
+        "TARGETED_RELEARN",
+        "Make the next visit more focused",
+        "Several stages are recorded, but an outcome still feels difficult.",
+        "Choose one missed question as a Worked Example. Work through it, close your notes, explain it from memory, and Crosscheck. Ask for help with the confusing step when needed.",
+        "exampleRecall", 1, "Worked Examples", 70
+      );
+    }
+
+    return result.sort((a, b) => a.rank - b.rank);
+  }
+
+  function recommend(s, r = null) {
+    const base = {
+      version,
+      caution: "Based on your ratings and recorded activity."
+    };
+
+    const issue = issues(s, r)[0];
+
+    if (issue) {
+      return Object.assign(base, issue);
+    }
+
+    if (strong(r)) {
+      const text = r.hadAssessment === false
+        ? "Keep the study methods you find useful and check again next week. Your learning rating is strong; assessment results can be reviewed when you have one."
+        : "Keep the methods you find useful. You do not need to change just to make your stage percentages even.";
+
+      return Object.assign(base, {
+        code: "KEEP_WORKING_APPROACH",
+        focus: "maintain",
+        title: "Keep the useful parts",
+        text,
+        action: text,
+        targetStage: 2,
+        targetMethod: "Teach"
+      });
+    }
+
+    const neutral =
+      r &&
+      rate(r.learningRating) === 3 &&
+      (
+        assessment(r) === null ||
+        assessment(r) === 3 ||
+        assessment(r) >= 4
+      );
+
+    if (neutral && enough(s)) {
+      const text =
+        "Keep the useful parts of your routine for another week. Pick one idea that still feels uncertain and use a brief memory check to decide what needs review.";
+
+      return Object.assign(base, {
+        code: "KEEP_TESTING_APPROACH",
+        focus: "maintain",
+        title: "Keep testing your approach",
+        text,
+        action: text,
+        targetStage: 2,
+        targetMethod: "Teach"
+      });
+    }
+
+    const text =
+      "Try one short Retrieval from memory, Crosscheck what you missed, then choose a brief Assess practice. Use your next learning rating to decide what to keep.";
+
+    return Object.assign(base, {
+      code: "TRY_COMBINATION",
+      focus: "cycle",
+      title: "Choose one useful next step",
+      text,
+      action: text,
+      targetStage: 2,
+      targetMethod: "Teach"
+    });
+  }
+
+  return {
+    version, methods, n, z, rate, assessment,
+    concerns, strong, stage, entries, enough,
+    issues, recommend
+  };
+})();
+
 
 const StudyCoach = (() => {
   const DAY = 86400000;
@@ -75,7 +377,6 @@ const StudyCoach = (() => {
     }
 
     const d = new Date(row.timestamp);
-
     return isNaN(d) ? "" : dateKey(d);
   }
 
@@ -90,6 +391,7 @@ const StudyCoach = (() => {
   function summarize(rows) {
     const s = {
       count: 0,
+      positive: 0,
       seconds: 0,
       crossSeconds: 0,
       days: [],
@@ -133,6 +435,8 @@ const StudyCoach = (() => {
       const method = String(r.method || "Unspecified");
 
       s.count++;
+      if (secs > 0) s.positive++;
+
       s.seconds += secs + cross;
       s.crossSeconds += cross;
       days.add(localDay(r));
@@ -204,10 +508,7 @@ const StudyCoach = (() => {
   }
 
   function pending(
-    rows,
-    reflections,
-    startWeek,
-    today
+    rows, reflections, startWeek, today
   ) {
     const groups = new Map();
 
@@ -265,282 +566,33 @@ const StudyCoach = (() => {
   }
 
   function recommend(s, outcome = null) {
-    const a = s.stages;
-
-    const t =
-      a[1].seconds +
-      a[2].seconds +
-      a[3].seconds;
-
-    const shares = {
-      learn: t ? a[1].seconds / t : 0,
-      retrieval: t ? a[2].seconds / t : 0,
-      assess: t ? a[3].seconds / t : 0
-    };
-
-    const l = outcome
-      ? Number(outcome.learningRating)
-      : null;
-
-    const p = outcome && outcome.hadAssessment
-      ? Number(outcome.assessmentRating)
-      : null;
-
-    const low = l !== null &&
-      (l <= 2 || (p !== null && p <= 2));
-
-    const strong = l !== null &&
-      l >= 4 &&
-      (p === null || p >= 4);
-
-    const base = {
-      version: "coach-1.0",
-      targetStage: 2,
-      targetMethod: "Teach",
-      caution:
-        "Based on your logged activity and self-ratings, not verified grades " +
-        "or proof of what caused your results."
-    };
-
-    const result = (
-      code,
-      title,
-      text,
-      stage = 2,
-      method = "Teach"
-    ) => Object.assign({}, base, {
-      code,
-      title,
-      text,
-      targetStage: stage,
-      targetMethod: method
-    });
-
-    if (s.count === 0) {
-      return result(
-        "NO_DATA",
-        "Build a starting point",
-        "Log a study stage in this class, then use a quick Retrieval and " +
-        "Crosscheck to decide what needs more work."
-      );
-    }
-
-    if (strong) {
-      return result(
-        "KEEP_WORKING_APPROACH",
-        "Keep what appears to be working",
-
-        p === null
-          ? "You reported clear learning but no assessment this week. Keep your " +
-            "useful methods and use a short independent practice test to check " +
-            "that understanding."
-
-          : "You reported strong learning and assessment performance. Keep your " +
-            "current approach; a later Retrieval → Crosscheck → Assess visit can " +
-            "check whether it lasts.",
-
-        3,
-        "Practice Test"
-      );
-    }
-
-    if (s.count < 2) {
-      return result(
-        "SMALL_SAMPLE",
-        "Try one complete study cycle",
-        "There is only one logged stage for this class this week. Try Retrieval " +
-        "→ Crosscheck → a short Assess; more activity will make the suggestions " +
-        "more useful."
-      );
-    }
-
-    const noRetrieval = a[2].count === 0;
-
-    const littleRetrieval =
-      noRetrieval ||
-      (low && shares.retrieval < 0.15);
-
-    if (
-      littleRetrieval &&
-      a[1].count > 0 &&
-      a[3].count > 0
-    ) {
-      return result(
-        "CONNECT_RETRIEVAL_ASSESS",
-        "Connect Learn and Assess with Retrieval",
-        "You logged learning and assessment, but " +
-        (
-          noRetrieval
-            ? "no Retrieval"
-            : "little Retrieval time"
-        ) +
-        ". Next visit, teach or reconstruct the material from memory, " +
-        "Crosscheck, then take a short practice test or Anki session. " +
-        "You can stop after any stage."
-      );
-    }
-
-    if (littleRetrieval && a[1].count > 0) {
-      return result(
-        "RETRIEVE_AFTER_LEARN",
-        "Check recall before more review",
-        "Your log is mostly Learn. Put materials away and teach what you " +
-        "remember. Crosscheck the gaps, relearn only what needs work, " +
-        "and try a short Assess."
-      );
-    }
-
-    if (noRetrieval && a[3].count > 0) {
-      return result(
-        "RETRIEVE_BEFORE_ASSESS",
-        "Start your next Assess with Retrieval",
-        "Your log has Assess but no separate Retrieval. Try teaching from " +
-        "memory, Crosscheck it, then assess. This is a suggested experiment, " +
-        "not a required time ratio."
-      );
-    }
-
-    const anki = a[3].methods.Anki;
-
-    if (
-      low &&
-      anki &&
-      a[3].count >= 3 &&
-      anki.count / a[3].count >= 0.65
-    ) {
-      return result(
-        "MATCH_ASSESSMENT_TASK",
-        "Add practice that matches your assessment",
-        "Most of your Assess stages were Anki and you reported some " +
-        "difficulty. Keep Anki for recall; also try a practice test or " +
-        "problems that match your actual assessment after Retrieval " +
-        "and Crosscheck.",
-        3,
-        "Practice Test"
-      );
-    }
-
-    if (
-      l !== null &&
-      l >= 4 &&
-      p !== null &&
-      p <= 2
-    ) {
-      return result(
-        "CHECK_CONFIDENCE",
-        "Check explanation against independent performance",
-        "Your learning rating was stronger than your assessment rating. " +
-        "Try explaining without notes, Crosscheck, then answer exam-style " +
-        "questions without hints. This may reveal gaps the confidence " +
-        "rating missed."
-      );
-    }
-
-    if (
-      l !== null &&
-      l <= 2 &&
-      p !== null &&
-      p >= 4
-    ) {
-      return result(
-        "LOW_CONFIDENCE_STRONG_RESULT",
-        "Use your results to check your confidence",
-        "Your assessment rating was stronger than your learning rating. " +
-        "Keep the methods that helped; explain the most uncertain idea " +
-        "from memory and Crosscheck before deciding how much review you need."
-      );
-    }
-
-    if (low && shares.learn >= 0.5) {
-      return result(
-        "TARGETED_RELEARN",
-        "Change how you tackle the difficult parts",
-        "You reported difficulty and much of your time was Learn. Work " +
-        "through one example or seek an explanation of a specific gap, " +
-        "then close the materials and retrieve it.",
-        1,
-        "Worked Examples"
-      );
-    }
-
-    if (
-      a[2].count > 0 &&
-      a[3].count === 0
-    ) {
-      return result(
-        "PAIR_RETRIEVAL_ASSESS",
-        "Follow Retrieval with a short Assess",
-        "You logged Retrieval but no Assess for this class this week. " +
-        "After your next Crosscheck, choose Test Yourself Now and try " +
-        "a short practice test or Anki session.",
-        3,
-        "Practice Test"
-      );
-    }
-
-    if (
-      a[2].count >= 2 &&
-      s.crossCount === 0
-    ) {
-      return result(
-        "LOG_CROSSCHECK",
-        "Include a Crosscheck",
-        "No Crosscheck time is logged for your Retrieval stages. Compare " +
-        "your explanation with a reliable source, fix gaps, then assess. " +
-        "Missing logged time does not prove you skipped checking."
-      );
-    }
-
-    if (low) {
-      return result(
-        "TARGET_GAPS",
-        "Use one gap-focused cycle",
-        "You reported difficulty despite using several stages. Pick a topic " +
-        "you missed, relearn that part, retrieve it without help, Crosscheck, " +
-        "then try different assessment questions."
-      );
-    }
-
-    return result(
-      "TRY_COMBINATION",
-      "Try Retrieval → Crosscheck → Assess",
-      "Combine these stages during one visit to this class, then return " +
-      "on another day. Keep the sequence optional and judge the adjustment " +
-      "using your next check-in."
-    );
+    return CoachRules.recommend(s, outcome);
   }
 
   return {
-    dateKey,
-    validDate,
-    addDays,
-    weekStart,
-    monthStart,
-    nextMonth,
-    daysBetween,
-    key,
-    number,
-    localDay,
-    stageName,
-    summarize,
-    forClassWeek,
-    pending,
-    recommend
+    dateKey, validDate, addDays, weekStart,
+    monthStart, nextMonth, daysBetween, key,
+    number, localDay, stageName, summarize,
+    forClassWeek, pending, recommend
   };
 })();
 
 
-/* Keep-or-adjust evaluation.
-   Logged behaviors are observations, not validated learning outcomes. */
+/*
+ * Weekly keep-or-adjust evaluation.
+ * Outcome guidance and attribution to an earlier suggestion
+ * are deliberately handled separately.
+ */
 
 const StudyFollowup = (() => {
   const C = StudyCoach;
-  const VERSION = "keep-adjust-1";
+  const VERSION = CoachRules.version;
 
   const decisionLabels = {
     keep: "Keep this approach",
     test: "Keep testing this adjustment",
     change: "Change one thing",
+    try: "Keep testing this adjustment",
     unknown: "Not enough information yet"
   };
 
@@ -622,12 +674,17 @@ const StudyFollowup = (() => {
       exampleRecall: 0,
       startedAt: "",
 
+      completeVisitIds:
+        all.length > 0 &&
+        all.every(r => !!r.visitId),
+
       completeStartTimes:
         all.length > 0 &&
         all.every(r =>
           validTime(r.startedAt) &&
           validTime(r.timestamp) &&
-          Date.parse(r.startedAt) <= Date.parse(r.timestamp)
+          Date.parse(r.startedAt) <=
+            Date.parse(r.timestamp)
         )
     };
 
@@ -649,7 +706,8 @@ const StudyFollowup = (() => {
         examples.some(x =>
           sameVisit(x, r) &&
           validTime(x.timestamp) &&
-          Date.parse(x.timestamp) <= Date.parse(r.startedAt)
+          Date.parse(x.timestamp) <=
+            Date.parse(r.startedAt)
         )
       ) {
         e.exampleRecall++;
@@ -679,11 +737,10 @@ const StudyFollowup = (() => {
         C.number(r.crosscheckSeconds) > 0
       );
 
-      // Old records without a Crosscheck finish time
-      // cannot establish the exact sequence.
       const complete = checked.some(r =>
         validTime(r.crosscheckFinishedAt) &&
-        Date.parse(r.crosscheckFinishedAt) >= Date.parse(r.timestamp) &&
+        Date.parse(r.crosscheckFinishedAt) >=
+          Date.parse(r.timestamp) &&
         Date.parse(r.crosscheckFinishedAt) <= cutoff
       );
 
@@ -724,7 +781,8 @@ const StudyFollowup = (() => {
       "RETRIEVE_BEFORE_ASSESS",
       "PAIR_RETRIEVAL_ASSESS",
       "TRY_COMBINATION",
-      "SMALL_SAMPLE"
+      "SMALL_SAMPLE",
+      "GAP_CYCLE"
     ].includes(code)) {
       return "cycle";
     }
@@ -732,7 +790,8 @@ const StudyFollowup = (() => {
     if ([
       "NO_DATA",
       "RETRIEVE_AFTER_LEARN",
-      "LOW_CONFIDENCE_STRONG_RESULT"
+      "LOW_CONFIDENCE_STRONG_RESULT",
+      "FOCUSED_RECALL"
     ].includes(code)) {
       return "recallCheck";
     }
@@ -752,53 +811,54 @@ const StudyFollowup = (() => {
       return "exampleRecall";
     }
 
-    if (code === "KEEP_WORKING_APPROACH") {
+    if ([
+      "KEEP_WORKING_APPROACH",
+      "KEEP_TESTING_APPROACH"
+    ].includes(code)) {
       return "maintain";
     }
 
-    // Topic/error quality cannot be inspected from a timer log.
     return "unobservable";
   }
 
   function normalize(rec) {
     const r = Object.assign({}, rec || {});
+
     r.focus = focusFor(rec);
 
     const actions = {
       cycle:
-        "Try Retrieval from memory → Crosscheck → a short Assess in one visit. " +
-        "Choose any stage when useful; continuing is optional.",
+        "In one visit: explain the topic from memory (Retrieval), check it " +
+        "against your notes (Crosscheck), then take a short practice test or Anki (Assess).",
 
       recallCheck:
-        "Retrieve without notes, Crosscheck against a reliable source, " +
-        "then review the specific gaps rather than repeating everything.",
+        "Close your notes and explain what you remember. Then Crosscheck and " +
+        "review only what you missed.",
 
       crosscheck:
-        "After Retrieval, compare your work with a reliable source and " +
-        "record the Crosscheck before deciding what to study next.",
+        "After Retrieval, check your work against your notes or another " +
+        "reliable source before moving on.",
 
       testCycle:
-        "Keep Retrieval and Crosscheck. Add a Practice Test or Practice Problems " +
-        "that match your actual assessment.",
+        "Keep Retrieval and Crosscheck. For Assess, use a Practice Test or " +
+        "Practice Problems that look like your real test.",
 
       exampleRecall:
-        "Work through one difficult Worked Example, then close the materials " +
-        "and explain it from memory before reassessing.",
+        "Work through one hard Worked Example, then close your notes and " +
+        "explain it from memory.",
 
       maintain:
-        "Keep the methods that are serving you. Check again next week; " +
-        "do not change just to make stage percentages more even."
+        "Keep the methods that are working and check again next week."
     };
 
     r.action =
       r.action ||
+      r.text ||
       actions[r.focus] ||
-      r.text;
+      "Choose one short memory check and review the result next week.";
 
-    r.version = "coach-" + VERSION;
-
-    r.caution =
-      "Based on logged activity and self-ratings, not verified grades or proof of cause.";
+    r.version = VERSION;
+    r.caution = "Based on your ratings and recorded activity.";
 
     return r;
   }
@@ -815,7 +875,9 @@ const StudyFollowup = (() => {
   }
 
   function metric(snapshot, focus) {
-    const e = snapshot && snapshot.behaviorEvidence;
+    const e =
+      snapshot &&
+      snapshot.behaviorEvidence;
 
     const retrieve = e
       ? e.retrieval
@@ -889,7 +951,11 @@ const StudyFollowup = (() => {
 
       unknown =
         !e ||
-        (n === 0 && e.sequenceUnknown > 0);
+        !known(n) ||
+        (
+          Number(n) === 0 &&
+          e.sequenceUnknown > 0
+        );
 
     } else if (
       focus === "recallCheck" ||
@@ -903,7 +969,7 @@ const StudyFollowup = (() => {
         retrieve
       );
 
-      unknown = crossed === null;
+      unknown = !known(crossed);
 
     } else if (focus === "exampleRecall") {
       n = e ? e.exampleRecall : null;
@@ -916,7 +982,14 @@ const StudyFollowup = (() => {
 
       unknown =
         !e ||
-        (n === 0 && !e.completeStartTimes);
+        !known(n) ||
+        (
+          Number(n) === 0 &&
+          (
+            !e.completeStartTimes ||
+            !e.completeVisitIds
+          )
+        );
 
     } else if (focus === "maintain") {
       n = e
@@ -931,7 +1004,7 @@ const StudyFollowup = (() => {
         null
       );
 
-      unknown = n === null;
+      unknown = !known(n);
 
     } else {
       line(
@@ -945,9 +1018,9 @@ const StudyFollowup = (() => {
 
     return {
       lines,
-      n,
+      n: known(n) ? Number(n) : null,
       unknown,
-      visible: n !== null && n > 0
+      visible: known(n) && Number(n) > 0
     };
   }
 
@@ -961,69 +1034,293 @@ const StudyFollowup = (() => {
   }
 
   function usable(r, current) {
-    return r &&
+    return !!r &&
       r.className === current.className &&
       C.validDate(r.weekStart) &&
+      C.weekStart(r.weekStart) === r.weekStart &&
       r.weekStart < current.weekStart &&
       validTime(r.timestamp) &&
+      (
+        !validTime(current.timestamp) ||
+        Date.parse(r.timestamp) <=
+          Date.parse(current.timestamp)
+      ) &&
       (
         !r.ownerDeviceId ||
         !current.ownerDeviceId ||
         r.ownerDeviceId === current.ownerDeviceId
       ) &&
       rating(r.learningRating) !== null &&
-      typeof r.hadAssessment === "boolean";
+      typeof r.hadAssessment === "boolean" &&
+      (
+        !r.hadAssessment ||
+        assessment(r) !== null
+      );
   }
 
-  function evaluate(current, history) {
-    const now = current.snapshot;
-    const ev = now.behaviorEvidence;
+  function moved(label, a, b) {
+    if (a === null || b === null) return "";
 
-    const initial = normalize(
-      C.recommend(now, current)
+    if (b > a) {
+      return label + " went up (" + a + " → " + b + ")";
+    }
+
+    if (b < a) {
+      return label + " went down (" + a + " → " + b + ")";
+    }
+
+    return label + " stayed at " + b + "/5";
+  }
+
+  function compare(before, after) {
+    const l1 = rating(before.learningRating);
+    const l2 = rating(after.learningRating);
+    const a1 = assessment(before);
+    const a2 = assessment(after);
+
+    const dl = l1 !== null && l2 !== null
+      ? l2 - l1
+      : null;
+
+    const da = a1 !== null && a2 !== null
+      ? a2 - a1
+      : null;
+
+    const learningText = moved(
+      "Your learning rating",
+      l1,
+      l2
     );
 
-    const previousWeek = C.addDays(
-      current.weekStart, -7
-    );
+    const assessmentText = da !== null
+      ? moved("Your assessment rating", a1, a2)
 
-    const previousRecords = history
+      : a2 !== null
+        ? "Your assessment rating is " + a2 +
+          "/5; there is no assessment rating from the previous week to compare"
+
+        : a1 !== null
+          ? "No assessment this week; your previous assessment rating was " +
+            a1 + "/5"
+
+          : "No assessments were rated in these two weeks";
+
+    return {
+      dl, da, l1, l2, a1, a2,
+      comparable: dl !== null,
+      assessmentComparable: da !== null,
+
+      improved:
+        dl !== null &&
+        dl >= 0 &&
+        (da === null || da >= 0) &&
+        (dl > 0 || (da !== null && da > 0)),
+
+      fell:
+        (dl !== null && dl < 0) ||
+        (da !== null && da < 0),
+
+      bothStrong: [l1, l2, a1, a2].every(v =>
+        v !== null && v >= 4
+      ),
+
+      stayedLow:
+        (
+          l1 !== null &&
+          l2 !== null &&
+          l1 <= 2 &&
+          l2 <= 2 &&
+          dl <= 0
+        ) ||
+        (
+          a1 !== null &&
+          a2 !== null &&
+          a1 <= 2 &&
+          a2 <= 2 &&
+          da <= 0
+        ),
+
+      learningText,
+      assessmentText,
+
+      text: [
+        learningText,
+        assessmentText
+      ].filter(Boolean).join(". ") + "."
+    };
+  }
+
+  function changePlanFor(focus, outcome = null) {
+    const learningLow =
+      outcome &&
+      rating(outcome.learningRating) !== null &&
+      rating(outcome.learningRating) <= 2;
+
+    const testLow =
+      assessment(outcome) !== null &&
+      assessment(outcome) <= 2;
+
+    if (
+      learningLow &&
+      (
+        !testLow ||
+        !["cycle", "testCycle"].includes(focus)
+      )
+    ) {
+      if (focus === "exampleRecall") {
+        return normalize({
+          code: "FOCUSED_RECALL",
+          focus: "recallCheck",
+          title: "Check the one step that remains confusing",
+
+          text:
+            "Take one unresolved question to your teacher or tutor. Then teach the corrected explanation from memory and Crosscheck it. Keep the rest of your routine.",
+
+          targetStage: 2,
+          targetMethod: "Teach"
+        });
+      }
+
+      return normalize({
+        code: "TARGETED_RELEARN",
+        focus: "exampleRecall",
+        title: "Try one worked example, then explain it",
+
+        text:
+          "Work through one difficult Worked Example. Close your notes, explain each step from memory, and Crosscheck the explanation before trying a new question.",
+
+        targetStage: 1,
+        targetMethod: "Worked Examples"
+      });
+    }
+
+    if (testLow && focus !== "testCycle") {
+      return normalize({
+        code: "MATCH_ASSESSMENT_TASK",
+        focus: "testCycle",
+        title: "Change the practice questions, not the whole routine",
+
+        text:
+          "Keep Retrieval and Crosscheck. For Assess, try a Practice Test or Practice Problems that match the kind of question you found difficult. Anki can stay part of your practice.",
+
+        targetStage: 3,
+        targetMethod: "Practice Test"
+      });
+    }
+
+    if (focus === "testCycle") {
+      return normalize({
+        code: "TARGETED_RELEARN",
+        focus: "exampleRecall",
+        title: "Repair one missed example before another test",
+
+        text:
+          "Pick one question you missed. Work through it as a Worked Example, then close your notes and explain it from memory before reassessing.",
+
+        targetStage: 1,
+        targetMethod: "Worked Examples"
+      });
+    }
+
+    return normalize({
+      code: "FOCUSED_RECALL",
+      focus: "recallCheck",
+      title: "Make the next recall check more focused",
+
+      text:
+        "Choose one idea that still feels uncertain. Explain it without notes, Crosscheck it, and get help with that specific gap rather than adding more general review.",
+
+      targetStage: 2,
+      targetMethod: "Teach"
+    });
+  }
+
+  function selectPrevious(current, history) {
+    const e =
+      current.snapshot &&
+      current.snapshot.behaviorEvidence;
+
+    const candidates = history
       .filter(r =>
         usable(r, current) &&
-        r.weekStart === previousWeek
+        r.weekStart === C.addDays(current.weekStart, -7)
       )
       .sort((a, b) =>
         Date.parse(a.timestamp) -
         Date.parse(b.timestamp)
       );
 
-    let previous =
-      previousRecords[previousRecords.length - 1] ||
-      null;
-
-    let timing = "unknown";
-
-    if (
-      previous &&
-      ev &&
-      ev.completeStartTimes
-    ) {
-      const beforeStudy = previousRecords.filter(r =>
-        Date.parse(r.timestamp) <= Date.parse(ev.startedAt)
-      );
-
-      if (beforeStudy.length) {
-        previous = beforeStudy[beforeStudy.length - 1];
-        timing = "before";
-      } else {
-        previous = previousRecords[0];
-        timing = "late";
-      }
+    if (!candidates.length) {
+      return {
+        record: null,
+        timing: "missing"
+      };
     }
 
+    if (
+      !e ||
+      e.completeStartTimes !== true ||
+      !validTime(e.startedAt)
+    ) {
+      return {
+        record: candidates[candidates.length - 1],
+        timing: "unknown"
+      };
+    }
+
+    const early = candidates.filter(r =>
+      Date.parse(r.timestamp) <=
+        Date.parse(e.startedAt)
+    );
+
+    return early.length
+      ? {
+          record: early[early.length - 1],
+          timing: "before"
+        }
+      : {
+          record: candidates[0],
+          timing: "late"
+        };
+  }
+
+  function latestPrevious(current, history) {
+    return history
+      .filter(r =>
+        usable(r, current) &&
+        r.weekStart === C.addDays(current.weekStart, -7)
+      )
+      .sort((a, b) =>
+        Date.parse(b.timestamp) -
+        Date.parse(a.timestamp)
+      )[0] || null;
+  }
+
+  function planKey(rec) {
+    if (!rec) return "";
+
+    const r = normalize(rec);
+
+    return JSON.stringify([
+      r.code,
+      r.focus,
+      r.targetStage || "",
+      r.targetMethod || ""
+    ]);
+  }
+
+  function evaluate(current, history) {
+    const initial = normalize(
+      C.recommend(current.snapshot, current)
+    );
+
+    const selected = selectPrevious(current, history);
+    const previous = latestPrevious(current, history);
+    const delivered = selected.record;
+
     const oldPlan =
-      previous && previous.recommendation
-        ? normalize(previous.recommendation)
+      delivered && delivered.recommendation
+        ? normalize(delivered.recommendation)
         : null;
 
     const focus = oldPlan
@@ -1035,374 +1332,281 @@ const StudyFollowup = (() => {
       focus
     );
 
-    const after = metric(now, focus);
+    const after = metric(
+      current.snapshot,
+      focus
+    );
 
-    const table = after.lines.map((r, i) => ({
-      label: r.label,
+    const fairTrial =
+      !!oldPlan &&
+      focus !== "unobservable" &&
+      selected.timing === "before" &&
+      !after.unknown &&
+      after.visible &&
+      CoachRules.enough(current.snapshot);
 
-      before: before.lines[i]
-        ? before.lines[i].value
-        : "Not recorded",
+    const trialNote = !oldPlan
+      ? "There is no earlier suggestion to check."
 
-      after: r.value
-    }));
+      : selected.timing === "late"
+        ? "The earlier suggestion was saved after studying had started, so it is not credited for these results."
 
-    table.push({
-      label: "Your learning rating",
+        : selected.timing !== "before"
+          ? "Start times are missing, so we cannot tell whether the earlier suggestion came before the studying."
 
-      before: previous
-        ? previous.learningRating + "/5"
-        : "Not recorded",
+          : focus === "unobservable" || after.unknown
+            ? "The log cannot verify the earlier suggestion. We can still choose a useful next step from your ratings."
 
-      after: current.learningRating + "/5"
-    });
+            : !after.visible
+              ? "The suggested step is not visible in the log yet; that does not mean a tried step failed."
 
-    table.push({
-      label: "Your assessment rating",
-
-      before: previous
-        ? previous.hadAssessment
-          ? previous.assessmentRating + "/5"
-          : "No assessment"
-        : "Not recorded",
-
-      after: current.hadAssessment
-        ? current.assessmentRating + "/5"
-        : "No assessment"
-    });
+              : "The suggested activity is recorded after the advice. This shows it was logged, not how well it was done.";
 
     const out = {
       version: VERSION,
-      decision: "unknown",
-      title: "Not enough information yet",
-      reason: "",
-      timing,
-
-      priorWeek: previous
-        ? previous.weekStart
-        : "",
-
+      timing: selected.timing,
+      priorWeek: previous ? previous.weekStart : "",
       currentWeek: current.weekStart,
 
-      previousRevision: previous
+      previousRevision: delivered
+        ? historyId(delivered)
+        : "",
+
+      previousOutcomeRevision: previous
         ? historyId(previous)
         : "",
 
-      previousSuggestion: oldPlan
-        ? oldPlan.text
-        : "",
-
-      previousTitle: oldPlan
-        ? oldPlan.title || "Previous next step"
-        : "",
+      previousSuggestion: oldPlan ? oldPlan.text : "",
+      previousTitle: oldPlan ? oldPlan.title : "",
 
       target: focus,
       behaviorVisible: after.visible,
-      rows: table,
-      next: initial,
-      evaluatedAt: current.timestamp
+      fairTrial,
+      trialNote,
+      evaluatedAt: current.timestamp,
+
+      rows: after.lines.map((r, i) => ({
+        label: r.label,
+        before: before.lines[i]?.value || "Not recorded",
+        after: r.value
+      })).concat([
+        {
+          label: "Your learning rating",
+
+          before: previous
+            ? previous.learningRating + "/5"
+            : "Not recorded",
+
+          after: current.learningRating + "/5"
+        },
+        {
+          label: "Your assessment rating",
+
+          before: previous
+            ? assessment(previous) === null
+              ? "No assessment"
+              : assessment(previous) + "/5"
+            : "Not recorded",
+
+          after: assessment(current) === null
+            ? "No assessment"
+            : assessment(current) + "/5"
+        }
+      ])
     };
 
     const finish = (
-      decision,
-      title,
-      reason,
-      plan
+      decision, title, reason, next = initial
     ) => {
-      out.decision = decision;
-      out.label = decisionLabels[decision];
-      out.title = title;
-      out.reason = reason;
+      const advice = normalize(next);
+      advice.text = advice.action;
 
-      out.next = normalize(
-        plan || oldPlan || initial
-      );
-
-      // Carry a forward-looking action, not an outdated description.
-      out.next.text = out.next.action;
-
-      return out;
+      return Object.assign(out, {
+        decision,
+        label: decisionLabels[decision],
+        title,
+        reason,
+        next: advice
+      });
     };
 
+    if (rating(current.learningRating) === null) {
+      return finish(
+        "unknown",
+        "Add your learning rating",
+        "A learning rating will help you choose a useful next step. An assessment rating is optional when no assessment took place."
+      );
+    }
+
     if (!previous) {
-      const older = history.some(r =>
-        usable(r, current)
-      );
-
       return finish(
-        "unknown",
-        "This is a starting point",
+        "test",
+        "Use this week as your starting point",
 
-        older
-          ? "The immediately preceding week's check-in is missing. " +
-            "Weeks separated by a gap are not treated as a before/after test."
-
-          : "There is no previous weekly check-in for this class yet. " +
-            "Keep this week's record as the starting point for next week.",
-
-        initial
-      );
-    }
-
-    if (!oldPlan) {
-      return finish(
-        "unknown",
-        "The previous suggestion was not recorded",
-        "The ratings can be displayed, but the app cannot determine " +
-        "which adjustment you were asked to try.",
-        initial
-      );
-    }
-
-    // Do not credit advice delivered after the studying had begun.
-    if (timing !== "before") {
-      return finish(
-        "unknown",
-        "The timing does not establish a fair comparison",
-
-        timing === "late"
-          ? "The previous advice was saved after this week's studying had " +
-            "already started. These ratings cannot show whether you followed that advice."
-
-          : "Some study-start times are missing. The app cannot establish that " +
-            "you received the previous advice before studying this week."
-      );
-    }
-
-    const previousPositive =
-      previous.snapshot &&
-      previous.snapshot.behaviorEvidence
-
-        ? previous.snapshot.behaviorEvidence.positiveStages
-
-        : previous.snapshot &&
-          Number(previous.snapshot.count);
-
-    const previousSeconds =
-      previous.snapshot &&
-      previous.snapshot.stages
-
-        ? [1, 2, 3].reduce(
-            (n, k) =>
-              n + C.number(
-                previous.snapshot.stages[k]?.seconds
-              ),
-            0
-          )
-
-        : 0;
-
-    if (
-      !ev ||
-      ev.positiveStages < 2 ||
-      !(previousPositive >= 2) ||
-      !previousSeconds
-    ) {
-      return finish(
-        "unknown",
-        "Too little logged activity to judge the adjustment",
-        "At least two completed stages with positive study time are needed " +
-        "in each rated week. This is a comparison safeguard, not a required study schedule."
-      );
-    }
-
-    const prevA = assessment(previous);
-    const currentA = assessment(current);
-
-    if (
-      prevA === null ||
-      currentA === null
-    ) {
-      return finish(
-        "unknown",
-        "Assessment evidence is missing",
-        "At least one week has no assessment rating. Learning-confidence " +
-        "ratings remain visible, but they cannot establish whether assessment performance improved."
-      );
-    }
-
-    const dl =
-      current.learningRating -
-      previous.learningRating;
-
-    const da = currentA - prevA;
-
-    const currentStrong =
-      current.learningRating >= 4 &&
-      currentA >= 4;
-
-    const priorStrong =
-      previous.learningRating >= 4 &&
-      prevA >= 4;
-
-    if (currentStrong && priorStrong) {
-      return finish(
-        "keep",
-        "Your reported results remain strong",
-
-        "Learning and assessment were both rated 4–5 in both weeks. " +
-        "Keep the useful approach; there is no need to make your stage " +
-        "percentages look more even." +
+        "Your learning rating is " +
+        current.learningRating + "/5. " +
 
         (
-          focus !== "maintain" &&
-          !after.visible
+          assessment(current) === null
+            ? "No assessment is rated, and that does not stop you choosing a study step. "
+            : "Your assessment rating is " +
+              assessment(current) + "/5. "
+        ) +
 
-            ? " The suggested change is not confirmed in the log, " +
-              "so it is not credited for these results."
-
-            : ""
-        ),
-
-        {
-          code: "KEEP_WORKING_APPROACH",
-          focus: "maintain",
-          title: "Keep what appears to be working",
-
-          text:
-            "Keep the methods that are serving you. Check again next " +
-            "week without chasing a perfect time ratio.",
-
-          targetStage: 3,
-          targetMethod: "Practice Test"
-        }
+        "Try one useful step and compare your next check-in."
       );
     }
 
-    if (after.unknown) {
-      return finish(
-        "unknown",
-        "The particular change cannot be verified",
+    const c = compare(previous, current);
+    const detail = c.text + " ";
 
-        focus === "unobservable"
-          ? "This suggestion concerned the quality or topic of your work. " +
-            "A timer log cannot verify that change; discuss the specific " +
-            "difficulty rather than assuming the advice succeeded or failed."
+    const learningPersisted =
+      c.l1 <= 2 &&
+      c.l2 <= 2 &&
+      c.dl <= 0;
 
-          : "The log lacks the sequence or Crosscheck timing needed to " +
-            "identify the suggested change. Older records remain saved " +
-            "and are shown as Not recorded, not zero."
-      );
-    }
+    const testPersisted =
+      c.da !== null &&
+      c.a1 <= 2 &&
+      c.a2 <= 2 &&
+      c.da <= 0;
 
-    if (!after.visible) {
-      return finish(
-        "unknown",
-        "The suggested change is not visible yet",
-        "Your log does not show the particular adjustment you were asked " +
-        "to try. That is different from trying it and finding it unhelpful. " +
-        "Keep the suggestion available for the next visit."
-      );
-    }
+    const changedLow =
+      learningPersisted ||
+      testPersisted;
 
-    if (
-      dl >= 0 &&
-      da >= 0 &&
-      (dl > 0 || da > 0) &&
-      current.learningRating >= 3 &&
-      currentA >= 3
-    ) {
-      return finish(
-        "keep",
-        "Your adjustment looks promising",
-        "The log shows the suggested activity and your ratings improved " +
-        "without either falling. Keep trying it for another week; " +
-        "the change looks promising."
-      );
-    }
+    if (changedLow) {
+      const domain = learningPersisted
+        ? "Learning"
+        : "Assessment";
 
-    const persistentLow =
-      (
-        previous.learningRating <= 2 &&
-        current.learningRating <= 2
-      ) ||
-      (
-        prevA <= 2 &&
-        currentA <= 2
-      );
+      const rationale = fairTrial
+        ? "The earlier step appears in your log, but " +
+          domain.toLowerCase() +
+          " still feels difficult. Change one part for the next visit."
 
-    if (
-      persistentLow &&
-      dl <= 0 &&
-      da <= 0 &&
-      after.n >= 2
-    ) {
-      let next;
-
-      if ([
-        "cycle",
-        "recallCheck",
-        "crosscheck"
-      ].includes(focus)) {
-        next = {
-          code: "MATCH_ASSESSMENT_TASK",
-          focus: "testCycle",
-
-          title:
-            "Add practice that matches your actual assessment",
-
-          text:
-            "Keep Retrieval and Crosscheck. Change only the Assess activity: " +
-            "try a Practice Test or Practice Problems matching the questions you expect.",
-
-          targetStage: 3,
-          targetMethod: "Practice Test"
-        };
-
-      } else {
-        next = {
-          code: "TARGETED_RELEARN",
-          focus: "exampleRecall",
-
-          title:
-            "Work through one difficult example before recall",
-
-          text:
-            "Keep the useful parts of your approach. Revisit one missed example, " +
-            "ask for help with the confusing step, then explain it from memory before reassessing.",
-
-          targetStage: 1,
-          targetMethod: "Worked Examples"
-        };
-      }
-
-      if (
-        focus === "exampleRecall" ||
-        focus === "maintain"
-      ) {
-        next = {
-          code: "TARGET_GAPS",
-          focus: "unobservable",
-          title: "Get feedback on one missed question",
-
-          text:
-            "Bring one question you could not explain to your teacher or tutor. " +
-            "Identify the specific gap before adding more study time, " +
-            "then retrieve the corrected explanation.",
-
-          targetStage: 1,
-          targetMethod: "Worked Examples"
-        };
-      }
+        : domain +
+          " has felt difficult in both rated weeks. We cannot judge whether the earlier suggestion helped; this is a new, focused experiment.";
 
       return finish(
         "change",
-        "The difficulty is continuing despite trying the adjustment",
+        "Change one part of the next visit",
+        detail + rationale,
+        changePlanFor(focus, current)
+      );
+    }
 
-        "The suggested activity appears at least twice in this week's log, " +
-        "but the same outcome was rated low in both weeks and neither rating " +
-        "improved. Change one part, not your whole study routine.",
+    if (c.fell) {
+      return finish(
+        "test",
+        "Check the part that became harder",
 
-        next
+        detail +
+        "One change does not mean you should rebuild your whole routine. Keep useful parts and check the specific task that felt harder.",
+
+        CoachRules.concerns(current)
+          ? initial
+          : oldPlan || initial
+      );
+    }
+
+    const learningStrong =
+      c.l1 >= 4 &&
+      c.l2 >= 4;
+
+    const assessmentNotLow =
+      c.a2 === null ||
+      c.a2 >= 3;
+
+    if (learningStrong && assessmentNotLow) {
+      const testsStrong =
+        c.a2 !== null &&
+        c.a2 >= 4;
+
+      return finish(
+        "keep",
+
+        testsStrong
+          ? "Your reported results are strong"
+          : "Keep the approach you find useful",
+
+        detail +
+
+        (
+          c.a2 === null
+            ? "Your learning ratings remain strong. Keep the useful methods; assessment results can be reviewed when you have one."
+            : "Keep the useful methods. You do not need to change just to make the percentages even."
+        ),
+
+        normalize(
+          C.recommend(current.snapshot, current)
+        )
+      );
+    }
+
+    if (c.improved) {
+      const learningOnly = c.da === null;
+
+      const mayKeep =
+        c.l2 >= 4 &&
+        (c.a2 === null || c.a2 >= 3);
+
+      return finish(
+        mayKeep ? "keep" : "test",
+        "Your ratings are moving in a useful direction",
+
+        detail +
+
+        (
+          learningOnly
+            ? "Keep trying the useful parts. This is progress in your reported learning; assessment results remain separate."
+
+            : fairTrial
+              ? "The suggested step is also recorded. Keep trying it and check the next outcome."
+
+              : "Keep trying the useful parts. These ratings do not tell us whether the earlier suggestion was used."
+        ),
+
+        oldPlan && oldPlan.focus !== "unobservable"
+          ? oldPlan
+          : initial
+      );
+    }
+
+    if (
+      c.l2 === 3 &&
+      (c.a2 === null || c.a2 >= 3)
+    ) {
+      return finish(
+        "test",
+        "Keep testing your approach",
+
+        detail +
+        "A 3/5 is a middle response, not a failure. Keep what helps and check one idea that still feels uncertain.",
+
+        initial
       );
     }
 
     return finish(
       "test",
-      "Give the adjustment a fair trial",
-      "The suggested activity appears in your log, but the ratings are mixed, " +
-      "little changed, or the trial is still small. One small rating change " +
-      "is not enough to abandon an approach. Keep it for another week and check again."
+      "Give one adjustment another useful try",
+
+      detail +
+
+      (
+        after.unknown
+          ? "The log cannot check the earlier suggestion, but that does not block your next step. Choose a small, visible activity below."
+
+          : oldPlan && !after.visible
+            ? "The earlier step is not visible yet. Try it before deciding whether it helps."
+
+            : "Keep one useful step and review the next learning rating."
+      ),
+
+      oldPlan && oldPlan.focus !== "unobservable"
+        ? oldPlan
+        : initial
     );
   }
 
@@ -1412,36 +1616,522 @@ const StudyFollowup = (() => {
     metric,
     evaluate,
     historyId,
-    normalize
+    normalize,
+    compare,
+    selectPrevious,
+    latestPrevious,
+    usable,
+    planKey,
+    changePlanFor,
+    labels: decisionLabels
   };
 })();
 
 
-/* Monthly keep-or-adjust review.
-   Built only from the weekly check-ins students already submit.
-   A week belongs to the month in which its Sunday falls. */
+/*
+ * Monthly and eight-week views.
+ * Learning and assessment trends are kept separate.
+ */
 
 const StudyMonthly = (() => {
   const C = StudyCoach;
   const F = StudyFollowup;
 
-  const labels = {
-    early: "Too early to tell",
-    tryFirst: "Try the step first",
-    change: "Change one thing",
-    keep: "Keep it"
-  };
+  function trend(values) {
+    const v = values
+      .filter(x => CoachRules.rate(x) !== null)
+      .map(Number);
 
-  const valid = r =>
-    r &&
-    [1, 2, 3, 4, 5].includes(Number(r.learningRating)) &&
-    typeof r.hadAssessment === "boolean";
+    if (!v.length) return "not rated";
+    if (v.length === 1) return "one rating";
 
-  const low = r =>
-    r.learningRating <= 2 ||
-    (r.hadAssessment && r.assessmentRating <= 2);
+    const d = v.slice(1).map(
+      (x, i) => x - v[i]
+    );
 
-  function review(name, monthStart, today, refs) {
+    if (d.every(x => x === 0)) {
+      return "unchanged";
+    }
+
+    if (
+      d.some(x => x > 0) &&
+      d.some(x => x < 0)
+    ) {
+      return "mixed";
+    }
+
+    return d.some(x => x < 0)
+      ? "declining"
+      : "rising";
+  }
+
+  function analyze(
+    name,
+    weeks,
+    refs,
+    history = [],
+    owner = "",
+    asOf = ""
+  ) {
+    weeks = [...new Set(weeks)]
+      .filter(C.validDate)
+      .sort();
+
+    const seen = new Map();
+
+    const cutoff =
+      asOf && C.validDate(asOf)
+        ? new Date(
+            C.addDays(asOf, 1) + "T00:00:00"
+          ).getTime()
+        : Infinity;
+
+    [
+      ...history,
+      ...Object.values(refs || {})
+    ].forEach(r => {
+      const stamp =
+        r && typeof r.timestamp === "string"
+          ? Date.parse(r.timestamp)
+          : NaN;
+
+      if (
+        !r ||
+        r.className !== name ||
+        !C.validDate(r.weekStart) ||
+        C.weekStart(r.weekStart) !== r.weekStart ||
+        !Number.isFinite(stamp) ||
+        stamp >= cutoff ||
+        CoachRules.rate(r.learningRating) === null ||
+        typeof r.hadAssessment !== "boolean" ||
+        (
+          r.hadAssessment &&
+          CoachRules.assessment(r) === null
+        ) ||
+        (
+          r.ownerDeviceId &&
+          owner &&
+          r.ownerDeviceId !== owner
+        )
+      ) {
+        return;
+      }
+
+      seen.set(F.historyId(r), r);
+    });
+
+    const all = [...seen.values()];
+    const latest = new Map();
+
+    all.forEach(r => {
+      const old = latest.get(r.weekStart);
+
+      if (
+        !old ||
+        Date.parse(r.timestamp) >
+          Date.parse(old.timestamp)
+      ) {
+        latest.set(r.weekStart, r);
+      }
+    });
+
+    const dated = weeks.map(w =>
+      latest.get(w) || null
+    );
+
+    const rated = dated.filter(Boolean);
+    const last = rated[rated.length - 1] || null;
+
+    const assessed = rated.filter(r =>
+      CoachRules.assessment(r) !== null
+    );
+
+    const learning = dated.map(r =>
+      r ? String(r.learningRating) : "—"
+    );
+
+    const tests = dated.map(r =>
+      !r
+        ? "—"
+        : r.hadAssessment
+          ? String(r.assessmentRating)
+          : "No assessment"
+    );
+
+    const lv = rated.map(r =>
+      Number(r.learningRating)
+    );
+
+    const av = assessed.map(r =>
+      Number(r.assessmentRating)
+    );
+
+    const lt = trend(lv);
+    const at = trend(av);
+
+    const outcomeLine = (
+      label, values, state
+    ) => {
+      if (!values.length) {
+        return label + ": not rated in this period.";
+      }
+
+      if (values.length === 1) {
+        return label + ": one rating of " +
+          values[0] + "/5; no trend yet.";
+      }
+
+      if (state === "unchanged") {
+        return label + ": stayed at " +
+          values[0] + "/5 across " +
+          values.length + " rated weeks.";
+      }
+
+      return label + ": " +
+
+        (
+          state === "rising"
+            ? "rated higher over time"
+            : state === "declining"
+              ? "rated lower over time"
+              : "varied across the weeks"
+        ) +
+
+        " (" + values.join(" → ") + ").";
+    };
+
+    const learningMessage = outcomeLine(
+      "Learning", lv, lt
+    );
+
+    const assessmentMessage = outcomeLine(
+      "Assessment", av, at
+    );
+
+    // Evaluate only a continuous run of the same delivered suggestion.
+    const episode = [];
+
+    let wantedKey = "";
+    let trialPlan = null;
+    let trialStopped = "";
+
+    for (let i = dated.length - 1; i >= 0; i--) {
+      const r = dated[i];
+
+      if (!r) {
+        trialStopped = "A check-in is missing.";
+        break;
+      }
+
+      const prior = F.selectPrevious(r, all);
+
+      if (
+        !prior.record ||
+        !prior.record.recommendation
+      ) {
+        trialStopped =
+          "No preceding recommendation is saved.";
+        break;
+      }
+
+      if (prior.timing !== "before") {
+        trialStopped =
+          "The suggestion's before-study timing is unknown or late.";
+        break;
+      }
+
+      if (!CoachRules.enough(r.snapshot)) {
+        trialStopped =
+          "There is too little timed activity to check that suggestion.";
+        break;
+      }
+
+      const k = F.planKey(
+        prior.record.recommendation
+      );
+
+      if (wantedKey && k !== wantedKey) {
+        trialStopped = "The suggested step changed.";
+        break;
+      }
+
+      const advice = F.normalize(
+        prior.record.recommendation
+      );
+
+      const metric = F.metric(
+        r.snapshot,
+        advice.focus
+      );
+
+      if (
+        advice.focus === "unobservable" ||
+        metric.unknown
+      ) {
+        trialStopped =
+          "The log cannot verify that particular step.";
+        break;
+      }
+
+      if (!wantedKey) {
+        wantedKey = k;
+        trialPlan = advice;
+      }
+
+      episode.unshift({
+        before: prior.record,
+        after: r,
+        metric
+      });
+    }
+
+    const checked = episode.length;
+
+    const followed = episode.filter(x =>
+      x.metric.visible
+    ).length;
+
+    const out = {
+      version: CoachRules.version,
+      weeks: weeks.length,
+      dates: weeks,
+      rated: rated.length,
+      assessed: assessed.length,
+      checked,
+      followed,
+      learning,
+      tests,
+      latest: last,
+      learningTrend: lt,
+      assessmentTrend: at,
+      learningMessage,
+      assessmentMessage,
+
+      trialNote: checked
+        ? "The same suggestion is visible in " +
+          followed + " of " +
+          checked + " timing-qualified weeks. " +
+          trialStopped
+
+        : "The prior suggestion cannot yet be evaluated from the log. " +
+          trialStopped,
+
+      advice: null
+    };
+
+    function finish(
+      verdict, title, why, chosen
+    ) {
+      const candidate =
+        chosen ||
+        (
+          last
+            ? C.recommend(last.snapshot, last)
+            : null
+        );
+
+      const advice = candidate
+        ? F.normalize(candidate)
+        : null;
+
+      if (advice) {
+        advice.text = advice.action;
+      }
+
+      return Object.assign(out, {
+        verdict,
+        label: F.labels[verdict],
+        title,
+        advice,
+
+        reason:
+          learningMessage + " " +
+          assessmentMessage + " " +
+          why
+      });
+    }
+
+    if (!last) {
+      return finish(
+        "unknown",
+        "Add a weekly check-in",
+        "A learning rating is enough to start this review. Choose No assessment when no assessment took place."
+      );
+    }
+
+    if (rated.length === 1) {
+      return finish(
+        "test",
+        "Start with one useful experiment",
+        "You have a starting point, not a trend. Try the next step and review another weekly learning rating; no test is required."
+      );
+    }
+
+    const prior = rated[rated.length - 2];
+
+    const adjacentLearning =
+      C.addDays(prior.weekStart, 7) ===
+      last.weekStart;
+
+    const latestLearning =
+      Number(last.learningRating);
+
+    const oldLearning =
+      Number(prior.learningRating);
+
+    const lastTest =
+      assessed[assessed.length - 1] || null;
+
+    const priorTest =
+      assessed[assessed.length - 2] || null;
+
+    const latestHasThatTest =
+      lastTest &&
+      lastTest.weekStart === last.weekStart;
+
+    const persistentLearning =
+      adjacentLearning &&
+      oldLearning <= 2 &&
+      latestLearning <= 2 &&
+      latestLearning <= oldLearning;
+
+    const persistentAssessment = !!(
+      priorTest &&
+      lastTest &&
+      latestHasThatTest &&
+      priorTest.assessmentRating <= 2 &&
+      lastTest.assessmentRating <= 2 &&
+      lastTest.assessmentRating <=
+        priorTest.assessmentRating
+    );
+
+    const delivered = F.selectPrevious(
+      last,
+      all
+    );
+
+    const oldAdvice =
+      delivered.record &&
+      delivered.record.recommendation;
+
+    const goal = oldAdvice
+      ? F.normalize(oldAdvice).focus
+      : "unobservable";
+
+    const recentTrial = episode.slice(-2);
+
+    const observedTrial =
+      recentTrial.length === 2 &&
+      recentTrial.every(x =>
+        x.metric.visible
+      );
+
+    if (
+      persistentLearning ||
+      persistentAssessment
+    ) {
+      return finish(
+        "change",
+        "Change one part, not the whole system",
+
+        observedTrial
+          ? "The suggested activity is logged repeatedly, but difficulty continues in the same outcome. Try one targeted adjustment."
+
+          : "You have reported difficulty more than once. We cannot say the earlier advice was tried or failed, but you can choose a new, focused experiment.",
+
+        F.changePlanFor(goal, last)
+      );
+    }
+
+    if (
+      lt === "mixed" ||
+      lt === "declining" ||
+      at === "mixed" ||
+      at === "declining"
+    ) {
+      return finish(
+        "test",
+
+        lt === "declining" || at === "declining"
+          ? "Check what became harder"
+          : "Keep testing the useful parts",
+
+        "Keep learning and assessment separate. Check the difficult task before changing the whole routine; one outcome does not cancel the other.",
+
+        CoachRules.concerns(last)
+          ? C.recommend(last.snapshot, last)
+          : trialPlan || C.recommend(last.snapshot, last)
+      );
+    }
+
+    const learningStrong =
+      lv.slice(-2).every(v => v >= 4);
+
+    const currentTest =
+      CoachRules.assessment(last);
+
+    const testNotLow =
+      currentTest === null ||
+      currentTest >= 3;
+
+    if (learningStrong && testNotLow) {
+      return finish(
+        "keep",
+        "Keep the approach you find useful",
+
+        av.length === 0
+          ? "Your learning ratings remain strong. Keep the useful methods; assessment evidence can be reviewed later."
+
+          : "The learning ratings are strong. Keep the useful methods and continue reviewing each outcome separately.",
+
+        C.recommend(last.snapshot, last)
+      );
+    }
+
+    if (
+      (lt === "rising" || at === "rising") &&
+      latestLearning >= 3 &&
+      testNotLow
+    ) {
+      return finish(
+        latestLearning >= 4 ? "keep" : "test",
+
+        av.length
+          ? "The recent ratings look encouraging"
+          : "Your reported learning is improving",
+
+        av.length === 0
+          ? "Continue the useful approach for now. This is encouraging learning feedback without a claim about test results."
+
+          : "Keep trying useful methods. Any assessment comparison uses only the dated assessment ratings that actually exist.",
+
+        trialPlan &&
+        trialPlan.focus !== "unobservable"
+          ? trialPlan
+          : C.recommend(last.snapshot, last)
+      );
+    }
+
+    return finish(
+      "test",
+      "Keep one experiment long enough to judge it",
+      "Middle or mixed readiness is not failure. Keep what helps, check one uncertain idea, and use your next learning rating.",
+
+      trialPlan &&
+      trialPlan.focus !== "unobservable"
+        ? trialPlan
+        : C.recommend(last.snapshot, last)
+    );
+  }
+
+  function review(
+    name,
+    monthStart,
+    today,
+    refs,
+    history = [],
+    owner = ""
+  ) {
     const end = C.nextMonth(monthStart);
     const weeks = [];
 
@@ -1455,149 +2145,89 @@ const StudyMonthly = (() => {
       if (
         sunday >= monthStart &&
         sunday < end &&
-        sunday <= today
+        C.addDays(w, 7) <= today
       ) {
         weeks.push(w);
       }
     }
 
-    const rated = weeks
-      .map(w => refs[C.key(w, name)])
-      .filter(valid);
-
-    // Did the previous week's suggested step show up in this week's log?
-    let checked = 0;
-    let followed = 0;
-
-    rated.forEach(r => {
-      const prev = refs[
-        C.key(C.addDays(r.weekStart, -7), name)
-      ];
-
-      if (!prev || !prev.recommendation) return;
-
-      const plan = F.normalize(prev.recommendation);
-
-      if (plan.focus === "unobservable") return;
-
-      const m = F.metric(r.snapshot, plan.focus);
-
-      if (m.unknown && !m.visible) return;
-
-      checked++;
-
-      if (m.visible) followed++;
-    });
-
-    const out = {
-      complete: today >= end,
-      weeks: weeks.length,
-      rated: rated.length,
-      checked,
-      followed,
-
-      learning: rated.map(r =>
-        String(r.learningRating)
+    return Object.assign(
+      analyze(
+        name,
+        weeks,
+        refs,
+        history,
+        owner,
+        today
       ),
-
-      tests: rated.map(r =>
-        r.hadAssessment
-          ? String(r.assessmentRating)
-          : "—"
-      ),
-
-      latest: rated[rated.length - 1] || null
-    };
-
-    const finish = (verdict, title, reason) =>
-      Object.assign(out, {
-        verdict,
-        label: labels[verdict],
-        title,
-        reason
-      });
-
-    if (rated.length < 3) {
-      return finish(
-        "early",
-        "Too early to judge this month",
-        "A monthly result needs at least 3 rated weeks; this class has " +
-        rated.length +
-        ". Keep answering the Sunday check-in and use the next step below."
-      );
-    }
-
-    if (checked < 2) {
-      return finish(
-        "early",
-        "Too early to judge this month",
-        "The suggested step could be checked in only " +
-        checked +
-        " week" + (checked === 1 ? "" : "s") +
-        " so far. Use the next step below and log each stage."
-      );
-    }
-
-    if (followed * 2 < checked) {
-      return finish(
-        "tryFirst",
-        "Try the suggested step before changing anything",
-        "The suggested step showed up in your log in " +
-        followed + " of " + checked +
-        " weeks. Your ratings can't show whether it helps until you use it."
-      );
-    }
-
-    const first = rated[0];
-    const last = out.latest;
-
-    const improved =
-      last.learningRating > first.learningRating ||
-      (
-        first.hadAssessment &&
-        last.hadAssessment &&
-        last.assessmentRating > first.assessmentRating
-      );
-
-    if (low(last) && !improved) {
-      return finish(
-        "change",
-        "Change one thing",
-        "You used the suggested step in " +
-        followed + " of " + checked +
-        " weeks, but your ratings stayed low. Keep what helps and " +
-        "change one part: the next step below."
-      );
-    }
-
-    return finish(
-      "keep",
-      "Keep it",
-      "You used the suggested step in " +
-      followed + " of " + checked +
-      " weeks and your ratings " +
-      (improved ? "improved" : "held steady") +
-      ". Keep going."
+      {
+        complete: today >= end,
+        start: monthStart,
+        end
+      }
     );
   }
 
-  return { review };
+  function recent(
+    name,
+    today,
+    refs,
+    history = [],
+    owner = ""
+  ) {
+    const end = C.weekStart(today);
+    const start = C.addDays(end, -56);
+    const weeks = [];
+
+    for (
+      let w = start;
+      w < end;
+      w = C.addDays(w, 7)
+    ) {
+      weeks.push(w);
+    }
+
+    return Object.assign(
+      analyze(
+        name,
+        weeks,
+        refs,
+        history,
+        owner,
+        today
+      ),
+      {
+        complete: true,
+        start,
+        end
+      }
+    );
+  }
+
+  return {
+    review,
+    recent,
+    trend,
+    analyze
+  };
 })();
 
+
+/*
+ * Student interface, timers, storage, upload queue,
+ * Sunday check-ins, progress and backups.
+ */
 
 (() => {
   "use strict";
 
-  // Existing v4 keys remain unchanged.
   const K = {
     classes: "studySystem.classes.v4",
     sessions: "studySystem.sessions.v4",
     device: "studySystem.deviceId.v4",
     submissions: "studySystem.weeklySubmissions.v4",
-
     ankiDone: "studySystem.ankiDone.v4.",
     ankiHide: "studySystem.ankiDismiss.v4.",
-
     reflections: "studySystem.weeklyReflections.v1",
     start: "studySystem.reflectionStartWeek.v1",
     active: "studySystem.activeSession.v1",
@@ -1611,89 +2241,51 @@ const StudyMonthly = (() => {
 
   const catalog = {
     "Math": [
-      "Algebra 1",
-      "Geometry",
-      "Algebra 2",
-      "Integrated Math",
-      "Math Analysis",
-      "Precalculus",
-      "Calculus",
-      "AP Calculus AB",
-      "AP Statistics",
+      "Algebra 1", "Geometry", "Algebra 2",
+      "Integrated Math", "Math Analysis", "Precalculus",
+      "Calculus", "AP Calculus AB", "AP Statistics",
       "Other Math"
     ],
 
     "Science": [
-      "Biology",
-      "Honors Biology",
-      "Chemistry",
-      "Physics",
-      "Physiology",
-      "AP Biology",
-      "AP Chemistry",
-      "AP Environmental Science",
-      "AP Physics 1",
-      "Other Science"
+      "Biology", "Honors Biology", "Chemistry",
+      "Physics", "Physiology", "AP Biology",
+      "AP Chemistry", "AP Environmental Science",
+      "AP Physics 1", "Other Science"
     ],
 
     "English": [
-      "English 9",
-      "English 9 Honors",
-      "English 10",
-      "English 10 Honors",
-      "American Literature",
-      "American Literature Honors",
-      "AP English Language",
-      "Advanced Composition",
-      "Advanced Composition Honors",
-      "AP English Literature",
-      "Other English"
+      "English 9", "English 9 Honors", "English 10",
+      "English 10 Honors", "American Literature",
+      "American Literature Honors", "AP English Language",
+      "Advanced Composition", "Advanced Composition Honors",
+      "AP English Literature", "Other English"
     ],
 
     "History / Social Science": [
-      "World History",
-      "Honors World History",
-      "AP World History",
-      "U.S. History",
-      "AP U.S. History",
-      "Government",
-      "Economics",
-      "AP Government",
-      "AP Human Geography",
-      "AP Psychology",
-      "Ethnic Studies",
-      "Health",
+      "World History", "Honors World History",
+      "AP World History", "U.S. History",
+      "AP U.S. History", "Government", "Economics",
+      "AP Government", "AP Human Geography",
+      "AP Psychology", "Ethnic Studies", "Health",
       "Other History / Social Science"
     ],
 
     "World Language": [
-      "Spanish",
-      "Spanish 2",
-      "Spanish 3",
-      "AP Spanish Language",
-      "AP Spanish Literature",
+      "Spanish", "Spanish 2", "Spanish 3",
+      "AP Spanish Language", "AP Spanish Literature",
       "Other World Language"
     ],
 
     "Elective / CTE": [
-      "Architecture 1",
-      "Architecture 2",
-      "Architectural Design",
-      "Digital Design",
-      "Film & Video Production",
-      "Exploring Computer Science",
-      "Robotics",
-      "Child Development",
-      "Health Science",
-      "Emergency Medical Technician",
-      "Art",
-      "AP Drawing",
-      "AP 3-D Art & Design",
-      "AP Seminar",
-      "AP Research",
-      "JROTC",
-      "PE / Athletics",
-      "Other Elective / CTE"
+      "Architecture 1", "Architecture 2",
+      "Architectural Design", "Digital Design",
+      "Film & Video Production", "Exploring Computer Science",
+      "Robotics", "Child Development", "Health Science",
+      "Emergency Medical Technician", "Art",
+      "AP Drawing", "AP 3-D Art & Design",
+      "AP Seminar", "AP Research", "JROTC",
+      "PE / Athletics", "Other Elective / CTE"
     ]
   };
 
@@ -1709,13 +2301,9 @@ const StudyMonthly = (() => {
         "other learning resources to understand the material.",
 
       methods: [
-        "Study / Review",
-        "Textbook",
-        "Video",
-        "Concept Map",
-        "Worked Examples",
-        "AI Tutor",
-        "Unit Coach"
+        "Study / Review", "Textbook", "Video",
+        "Concept Map", "Worked Examples",
+        "AI Tutor", "Unit Coach"
       ]
     },
 
@@ -1758,20 +2346,23 @@ const StudyMonthly = (() => {
     }
   };
 
-  const $ = id => document.getElementById(id);
+  const $ = id =>
+    document.getElementById(id);
+
   const root = $("appRoot");
   const dialog = $("reflectionDialog");
 
-  const esc = v => String(v ?? "").replace(
-    /[&<>"']/g,
-    c => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    }[c])
-  );
+  const esc = v =>
+    String(v ?? "").replace(
+      /[&<>"']/g,
+      c => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[c])
+    );
 
   const uid = () =>
     window.crypto && crypto.randomUUID
@@ -1802,7 +2393,7 @@ const StudyMonthly = (() => {
   let launchAnki = false;
 
   // ==================================================
-  // LOCAL STORAGE
+  // STORAGE
   // ==================================================
 
   function read(k, fallback) {
@@ -1825,7 +2416,10 @@ const StudyMonthly = (() => {
 
   function write(k, v) {
     try {
-      localStorage.setItem(k, JSON.stringify(v));
+      localStorage.setItem(
+        k,
+        JSON.stringify(v)
+      );
     } catch (e) {
       throw new Error(
         "This browser could not save data. Free device space or " +
@@ -1930,9 +2524,11 @@ const StudyMonthly = (() => {
       history[StudyFollowup.historyId(r)] = r;
     });
 
-    history[StudyFollowup.historyId(record)] = record;
+    history[
+      StudyFollowup.historyId(record)
+    ] = record;
 
-    // Archive first. Recover a failed second write at startup.
+    // History is written first to support interrupted-write recovery.
     write(K.history, history);
 
     const all = reflections();
@@ -1959,14 +2555,33 @@ const StudyMonthly = (() => {
       )[0] || null;
   }
 
+  // ==================================================
+  // SAVED WEEKLY AND MONTHLY FEEDBACK
+  // ==================================================
+
   function feedbackHtml(record, compact = false) {
     if (!record) return "";
 
-    const f =
+    const saved =
       record.followup ||
       record.snapshot?.keepAdjust;
 
-    const advice = record.recommendation;
+    const refreshed =
+      !saved ||
+      saved.version !== CoachRules.version;
+
+    let f = saved;
+    let advice = record.recommendation;
+
+    // Read-only refresh: original saved ratings/advice are preserved.
+    if (refreshed && record.snapshot) {
+      f = StudyFollowup.evaluate(
+        record,
+        historyList()
+      );
+
+      advice = f.next;
+    }
 
     if (!advice) return "";
 
@@ -1988,9 +2603,10 @@ const StudyMonthly = (() => {
         "</h3><p>" +
         esc(advice.text) +
         '</p><p class="small">' +
-        "This older check-in has no saved Keep or adjust comparison. " +
-        "Your next check-in will use the available history." +
-        "</p>" + button + "</div>"
+        "Your next check-in will compare weeks." +
+        "</p>" +
+        button +
+        "</div>"
       );
     }
 
@@ -2002,17 +2618,20 @@ const StudyMonthly = (() => {
     const table =
       '<div class="table-wrap"><table>' +
       '<caption class="small">' +
-      "Compare the weeks starting below" +
+      "Last week vs. this week" +
       "</caption><thead><tr>" +
       "<th>What changed</th><th>Previous<br>" +
+
       esc(
         f.priorWeek
           ? pretty(f.priorWeek)
           : "Not available"
       ) +
+
       "</th><th>Latest<br>" +
       esc(pretty(f.currentWeek)) +
       "</th></tr></thead><tbody>" +
+
       shown.map(r =>
         "<tr><td>" +
         esc(r.label) +
@@ -2022,19 +2641,20 @@ const StudyMonthly = (() => {
         esc(r.after) +
         "</td></tr>"
       ).join("") +
+
       "</tbody></table></div>";
 
     const more =
       '<p class="small"><strong>Previous suggestion:</strong> ' +
-      esc(
-        f.previousSuggestion ||
-        "No previous recommendation recorded."
-      ) +
+      esc(f.previousSuggestion || "None saved.") +
       "</p>" +
+
       f.rows.slice(1, -2).map(r =>
         '<p class="small">' +
-        esc(r.label) + ": " +
-        esc(r.before) + " → " +
+        esc(r.label) +
+        ": " +
+        esc(r.before) +
+        " → " +
         esc(r.after) +
         "</p>"
       ).join("");
@@ -2044,6 +2664,13 @@ const StudyMonthly = (() => {
 
     return (
       '<div class="coach">' +
+
+      (
+        refreshed
+          ? '<p class="small">Updated coaching for this saved check-in. Your original ratings and advice are unchanged in history.</p>'
+          : ""
+      ) +
+
       '<span class="eyebrow">KEEP OR ADJUST? · ' +
       esc(record.className) +
       '</span><span class="badge">' +
@@ -2062,108 +2689,101 @@ const StudyMonthly = (() => {
       button +
 
       "<details><summary>" +
+
       (
         compact
-          ? "See the dated comparison"
-          : "Why this suggestion?"
+          ? "See last week vs. this week"
+          : "More detail"
       ) +
+
       "</summary>" +
-
       (compact ? table + result : "") +
-
       more +
+
+      (
+        f.trialNote
+          ? '<p class="small">' +
+            esc(f.trialNote) +
+            "</p>"
+          : ""
+      ) +
+
       '</details><p class="small">' +
-      "Self-rated outcomes; the log cannot prove what caused a change." +
+      "Based on your ratings and recorded activity." +
       "</p></div>"
     );
   }
 
-  // One card per class on the Monthly screen.
-  // Shows how many rated weeks support the verdict
-  // and whether the month is still in progress.
-  function monthlyHtml(name, month) {
-    const m = StudyMonthly.review(
-      name,
-      month,
-      today(),
-      reflections()
-    );
+  function monthlyHtml(
+    name,
+    month,
+    recent = false
+  ) {
+    const m = recent
+      ? StudyMonthly.recent(
+          name,
+          today(),
+          reflections(),
+          historyList(),
+          deviceId()
+        )
 
-    const monthName = new Date(
-      month + "T12:00:00"
-    ).toLocaleDateString(
-      undefined,
-      { month: "long" }
-    );
+      : StudyMonthly.review(
+          name,
+          month,
+          today(),
+          reflections(),
+          historyList(),
+          deviceId()
+        );
 
-    const facts = [
-      m.complete
-        ? monthName
-        : monthName + " so far",
+    const label = recent
+      ? "LAST 8 COMPLETED WEEKS"
 
-      m.rated + " of " + m.weeks +
-      " week" + (m.weeks === 1 ? "" : "s") +
-      " rated"
-    ];
+      : new Date(
+          month + "T12:00:00"
+        ).toLocaleDateString(
+          undefined,
+          {
+            month: "long",
+            year: "numeric"
+          }
+        ) +
+        (m.complete ? "" : " · so far");
 
-    if (m.checked) {
-      facts.push(
-        "suggested step logged in " +
-        m.followed + " of " + m.checked
-      );
-    }
+    const advice = m.advice;
 
-    if (m.rated) {
-      facts.push(
-        "learning " + m.learning.join(" → ")
-      );
-    }
+    const rows = m.dates.map((w, i) =>
+      "<tr><td>" +
+      esc(pretty(w)) +
+      "</td><td>" +
+      esc(m.learning[i]) +
+      "</td><td>" +
+      esc(m.tests[i]) +
+      "</td></tr>"
+    ).join("");
 
-    if (m.tests.some(t => t !== "—")) {
-      facts.push(
-        "tests " + m.tests.join(" → ")
-      );
-    }
-
-    const source =
-      m.latest ||
-      latestReflection(name, C.nextMonth(month));
-
-    const advice =
-      source && source.recommendation;
-
-    return (
-      '<div class="coach">' +
-      '<span class="eyebrow">THIS MONTH · ' +
-      esc(name) +
-      '</span><span class="badge">' +
-      esc(m.label) +
-      "</span><h3>" +
-      esc(m.title) +
-      '</h3><p class="small">' +
-      esc(facts.join(" · ")) +
-      "</p><p>" +
-      esc(m.reason) +
-      "</p>" +
-
-      (
-        advice
-          ? "<p><strong>Next step:</strong> " +
-            esc(advice.text) +
-            "</p>" +
-            '<button type="button" class="text-button" ' +
-            'data-coach-class="' +
-            esc(name) +
-            '" data-coach-stage="' +
-            Number(advice.targetStage || 2) +
-            '">Choose this next step →</button>'
-          : ""
-      ) +
-
-      '<p class="small">' +
-      "Built from your weekly check-ins. Self-rated, not grades." +
-      "</p></div>"
-    );
+    return `<div class="coach">
+      <span class="eyebrow">${esc(label)} · ${esc(name)}</span>
+      <span class="badge">${esc(m.label)}</span>
+      <h3>${esc(m.title)}</h3>
+      <p class="small">${m.rated} learning-rated weeks; ${m.assessed} assessment-rated weeks.
+        ${m.latest ? "Latest rated week starts " + esc(pretty(m.latest.weekStart)) + "." : ""}</p>
+      <p>${esc(m.reason)}</p>
+      ${advice ? `<p><strong>Next step:</strong> ${esc(advice.text)}</p>
+        <button type="button" class="text-button" data-coach-class="${esc(name)}"
+          data-coach-stage="${Number(advice.targetStage || 2)}">Choose this next step →</button>` : ""}
+      <details><summary>See the weeks and the earlier suggestion</summary>
+        <div class="table-wrap"><table><thead><tr>
+          <th>Week starting</th><th>Learning</th><th>Assessment</th>
+        </tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="small">${esc(m.trialNote)}</p>
+        <p class="small">— means no check-in. No assessment is not a zero.
+          Learning feedback does not require an assessment. Weeks belong to the month
+          of their ending Sunday. The current unfinished week is not included.</p>
+      </details>
+      <p class="small">Based on your ratings and recorded activity.</p>
+    </div>`;
   }
 
   function deviceId() {
@@ -2458,13 +3078,15 @@ const StudyMonthly = (() => {
       s +=
         '<button class="class-button" data-class="' +
         i + '">' +
-        "<strong>" + esc(c.name) + "</strong>" +
-        "<span>" +
+        "<strong>" +
+        esc(c.name) +
+        "</strong><span>" +
         esc(lastChecked(c.name)) +
         "</span></button>";
     });
 
     root.innerHTML = s + "</div></section>";
+
     maybePrompt();
   }
 
@@ -2549,7 +3171,7 @@ const StudyMonthly = (() => {
   }
 
   // ==================================================
-  // CLASS STAGES AND CURRENT ADVICE
+  // STAGES AND METHODS
   // ==================================================
 
   function renderStages() {
@@ -2610,8 +3232,8 @@ const StudyMonthly = (() => {
       [1, 2, 3].map(n =>
         '<button class="stage-button ' +
         (chosenStage === n ? "selected" : "") +
-        '" data-stage="' +
-        n + '">' +
+        '" data-stage="' + n + '">' +
+
         "<span>Stage " + n + "</span>" +
         "<strong>" + stages[n].name + "</strong>" +
         "<span>" + stages[n].purpose + "</span>" +
@@ -2644,7 +3266,7 @@ const StudyMonthly = (() => {
   function openTimer(method) {
     if (active) return;
 
-    // Anki always belongs to Stage 3.
+    // Anki always remains Stage 3 — Assess.
     if (method === "Anki") {
       chosenStage = 3;
     }
@@ -2670,7 +3292,7 @@ const StudyMonthly = (() => {
   }
 
   // ==================================================
-  // TIMERS
+  // STUDY AND CROSSCHECK TIMERS
   // ==================================================
 
   function renderTimer() {
@@ -2686,10 +3308,7 @@ const StudyMonthly = (() => {
       (
         cross
           ? "Crosscheck"
-
-          : "Stage " +
-            active.stage +
-            " — " +
+          : "Stage " + active.stage + " — " +
             C.stageName(active.stage)
       ) +
 
@@ -2718,10 +3337,8 @@ const StudyMonthly = (() => {
       (
         active.runningSince !== null
           ? "Pause"
-
           : active.ms > 0
             ? "Resume"
-
             : cross
               ? "Start Crosscheck"
               : "Start"
@@ -2742,11 +3359,13 @@ const StudyMonthly = (() => {
       ) +
 
       '<button class="text-button" data-action="' +
+
       (
         cross
           ? "skip-crosscheck"
           : "cancel-timer"
       ) +
+
       '">' +
 
       (
@@ -2780,7 +3399,6 @@ const StudyMonthly = (() => {
 
     try {
       queueStage(record);
-
     } catch (e) {
       message(
         "Saved on this device; the upload is waiting. " +
@@ -2820,7 +3438,7 @@ const StudyMonthly = (() => {
         totalSeconds: Math.floor(active.ms / 1000)
       };
 
-      // Save Retrieval before Crosscheck so it is not lost.
+      // Save Retrieval before moving to Crosscheck.
       persistRecord(record);
 
       if (
@@ -2947,7 +3565,7 @@ const StudyMonthly = (() => {
   }
 
   // ==================================================
-  // WEEKLY / MONTHLY PROGRESS AND SAVED COMPARISONS
+  // WEEKLY AND MONTHLY PROGRESS
   // ==================================================
 
   function renderProgress() {
@@ -3013,19 +3631,23 @@ const StudyMonthly = (() => {
 
       '<div class="actions">' +
       '<button class="' +
+
       (
         periodKind === "week"
           ? "primary"
           : "secondary"
       ) +
+
       '" data-period="week">Weekly</button>' +
 
       '<button class="' +
+
       (
         periodKind === "month"
           ? "primary"
           : "secondary"
       ) +
+
       '" data-period="month">Monthly</button>' +
       "</div>" +
 
@@ -3126,7 +3748,9 @@ const StudyMonthly = (() => {
       ". There is no required “perfect” percentage." +
       "</p></section>";
 
-    const periodRefs = Object.values(reflections()).filter(r =>
+    const periodRefs = Object.values(
+      reflections()
+    ).filter(r =>
       periodKind === "week"
         ? r.weekStart === periodKey
 
@@ -3147,6 +3771,12 @@ const StudyMonthly = (() => {
       );
 
       const cs = C.summarize(classRows);
+
+      const visits = new Set(
+        classRows
+          .filter(r => r.visitId)
+          .map(r => r.visitId)
+      ).size;
 
       const ref = periodKind === "week"
         ? reflections()[
@@ -3183,11 +3813,13 @@ const StudyMonthly = (() => {
               '" data-week="' +
               periodKey +
               '">' +
+
               (
                 ref
                   ? "Update ratings"
                   : "Weekly check-in"
               ) +
+
               "</button>"
 
             : ""
@@ -3226,10 +3858,15 @@ const StudyMonthly = (() => {
         latestReflection(name, end);
 
       if (periodKind === "month") {
-        // Monthly verdict first; the latest weekly card stays one tap away.
-        html += monthlyHtml(name, periodKey);
+        html += monthlyHtml(
+          name,
+          periodKey
+        );
 
-        if (displayed && displayed.recommendation) {
+        if (
+          displayed &&
+          displayed.recommendation
+        ) {
           html +=
             "<details><summary>Latest weekly comparison</summary>" +
             feedbackHtml(displayed) +
@@ -3248,6 +3885,18 @@ const StudyMonthly = (() => {
       }
 
       html +=
+        '<p class="small">Recorded visits: ' +
+        visits +
+        " · Stages without a visit ID: " +
+        classRows.filter(r => !r.visitId).length +
+        ".</p>";
+
+      html +=
+        "<details><summary>My longer-term pattern · last 8 completed weeks</summary>" +
+        monthlyHtml(name, periodKey, true) +
+        "</details>";
+
+      html +=
         "<details><summary>Methods within each stage</summary>";
 
       [1, 2, 3].forEach(k => {
@@ -3256,8 +3905,7 @@ const StudyMonthly = (() => {
         const entries = Object.entries(
           st.methods
         ).sort(
-          (a, b) =>
-            b[1].count - a[1].count
+          (a, b) => b[1].count - a[1].count
         );
 
         html +=
@@ -3285,6 +3933,7 @@ const StudyMonthly = (() => {
             entries.map(([n, d]) =>
               "<tr><td>" +
               esc(n) +
+
               '</td><td class="num">' +
               d.count +
 
@@ -3311,13 +3960,9 @@ const StudyMonthly = (() => {
         "<summary>Saved check-in and advice history</summary>" +
 
         historyList()
-          .filter(r =>
-            r.className === name
-          )
+          .filter(r => r.className === name)
           .sort((a, b) =>
-            b.timestamp.localeCompare(
-              a.timestamp
-            )
+            b.timestamp.localeCompare(a.timestamp)
           )
           .map(r =>
             '<p class="small"><strong>' +
@@ -3372,6 +4017,7 @@ const StudyMonthly = (() => {
         "Stages and check-ins sync automatically. " +
         "This button also sends the compatible weekly aggregate." +
         "</p>" +
+
         '<button class="secondary" data-action="weekly-share">' +
         "Share / update weekly summary</button></section>";
     }
@@ -3456,7 +4102,6 @@ const StudyMonthly = (() => {
       ) +
 
       '</span><h2 id="reflectionTitle">' +
-
       esc(reflectionTarget.className) +
 
       '</h2><p class="small">' +
@@ -3535,9 +4180,7 @@ const StudyMonthly = (() => {
           form.get("learning")
         );
 
-        const answer = form.get(
-          "assessment"
-        );
+        const answer = form.get("assessment");
 
         if (
           ![1, 2, 3, 4, 5].includes(learning) ||
@@ -3586,8 +4229,6 @@ const StudyMonthly = (() => {
 
         record.followup = followup;
         record.recommendation = followup.next;
-
-        // The supplied backend preserves these extra JSON fields.
         snapshot.keepAdjust = followup;
 
         saveReflectionLocal(record);
@@ -3673,21 +4314,15 @@ const StudyMonthly = (() => {
   }
 
   // ==================================================
-  // PERSISTENT UPLOAD QUEUE
-  // Remove an item only after Google confirms it.
+  // PERSISTENT SUBMISSION QUEUE
   // ==================================================
 
   function enqueue(key, payload) {
     const queue = read(K.queue, []);
-
-    const fingerprint =
-      JSON.stringify(payload);
-
+    const fingerprint = JSON.stringify(payload);
     const receipt = read(K.sync, {});
 
-    if (
-      receipt[key] === fingerprint
-    ) {
+    if (receipt[key] === fingerprint) {
       return;
     }
 
@@ -3749,6 +4384,7 @@ const StudyMonthly = (() => {
         method: r.method,
         studySeconds: r.studySeconds || 0,
         crosscheckSeconds: r.crosscheckSeconds || 0,
+        crosscheckFinishedAt: r.crosscheckFinishedAt || "",
 
         totalSeconds:
           C.number(r.studySeconds) +
@@ -3842,8 +4478,12 @@ const StudyMonthly = (() => {
       }
 
       const requestId = uid();
-      const frame = document.createElement("iframe");
-      const form = document.createElement("form");
+
+      const frame =
+        document.createElement("iframe");
+
+      const form =
+        document.createElement("form");
 
       frame.name =
         "study_upload_" +
@@ -3875,6 +4515,7 @@ const StudyMonthly = (() => {
 
       const clean = () => {
         clearTimeout(timeout);
+
         window.removeEventListener(
           "message",
           receive
@@ -3980,9 +4621,7 @@ const StudyMonthly = (() => {
 
         const receipts = read(K.sync, {});
 
-        receipts[q.key] =
-          q.fingerprint;
-
+        receipts[q.key] = q.fingerprint;
         write(K.sync, receipts);
 
         lastError = "";
@@ -4029,10 +4668,7 @@ const StudyMonthly = (() => {
   }
 
   function shareWeek() {
-    const end = C.addDays(
-      periodKey,
-      7
-    );
+    const end = C.addDays(periodKey, 7);
 
     const s = C.summarize(
       sessions().filter(r =>
@@ -4070,10 +4706,7 @@ const StudyMonthly = (() => {
       }
     );
 
-    const history = read(
-      K.submissions,
-      {}
-    );
+    const history = read(K.submissions, {});
 
     history[periodKey] =
       new Date().toISOString();
@@ -4104,8 +4737,7 @@ const StudyMonthly = (() => {
         key !== K.backup &&
         key !== "studySystem.beforeRestore.v1"
       ) {
-        data[key] =
-          localStorage.getItem(key);
+        data[key] = localStorage.getItem(key);
       }
     }
 
@@ -4126,8 +4758,9 @@ const StudyMonthly = (() => {
           2
         )
       ],
-
-      {type: "application/json"}
+      {
+        type: "application/json"
+      }
     );
 
     const a = document.createElement("a");
@@ -4179,7 +4812,6 @@ const StudyMonthly = (() => {
   $("backupInput").onchange = async e => {
     try {
       const file = e.target.files[0];
-
       if (!file) return;
 
       const b = JSON.parse(
@@ -4288,9 +4920,7 @@ const StudyMonthly = (() => {
       });
 
       const mergedRefs = reflections();
-
-      const refData =
-        parsed(K.reflections) || {};
+      const refData = parsed(K.reflections) || {};
 
       Object.entries(refData).forEach(([k, r]) => {
         if (
@@ -4334,7 +4964,7 @@ const StudyMonthly = (() => {
         }
       });
 
-      // Preserve a pre-restore copy first.
+      // Preserve a pre-restore copy before changing local records.
       write(
         "studySystem.beforeRestore.v1",
         backupData()
@@ -4400,10 +5030,19 @@ const StudyMonthly = (() => {
   };
 
   // ==================================================
-  // INITIALIZE AND RECOVER INTERRUPTED LOCAL WRITES
+  // STARTUP AND INTERRUPTED-WRITE RECOVERY
   // ==================================================
 
   function init() {
+    const versionLabel =
+      document.getElementById("coachVersion");
+
+    if (versionLabel) {
+      versionLabel.textContent =
+        "Learning-first coaching · " +
+        CoachRules.version;
+    }
+
     classes();
     sessions();
     reflections();
@@ -4448,9 +5087,7 @@ const StudyMonthly = (() => {
       write(K.reflections, latest);
     }
 
-    if (
-      !localStorage.getItem(K.backup)
-    ) {
+    if (!localStorage.getItem(K.backup)) {
       try {
         write(
           K.backup,
@@ -4467,24 +5104,17 @@ const StudyMonthly = (() => {
 
     deviceId();
 
-    if (
-      !localStorage.getItem(K.start)
-    ) {
+    if (!localStorage.getItem(K.start)) {
       rawWrite(
         K.start,
         C.weekStart(today())
       );
     }
 
-    active = read(
-      K.active,
-      null
-    );
+    active = read(K.active, null);
 
     if (active) {
-      if (
-        active.runningSince !== null
-      ) {
+      if (active.runningSince !== null) {
         active.ms += Math.max(
           0,
 
@@ -4536,7 +5166,6 @@ const StudyMonthly = (() => {
 
   document.addEventListener(
     "click",
-
     safe(e => {
       const b = e.target.closest("button");
 
@@ -4545,9 +5174,7 @@ const StudyMonthly = (() => {
       if (b.dataset.nav) {
         launchAnki = false;
 
-        if (
-          b.dataset.nav === "home"
-        ) {
+        if (b.dataset.nav === "home") {
           reminderDismissed = false;
           chosenClass = null;
         }
@@ -4556,13 +5183,9 @@ const StudyMonthly = (() => {
         return;
       }
 
-      if (
-        b.dataset.class !== undefined
-      ) {
+      if (b.dataset.class !== undefined) {
         chosenClass =
-          classes()[
-            Number(b.dataset.class)
-          ];
+          classes()[Number(b.dataset.class)];
 
         visitId = uid();
 
@@ -4590,9 +5213,7 @@ const StudyMonthly = (() => {
         return;
       }
 
-      if (
-        b.dataset.method !== undefined
-      ) {
+      if (b.dataset.method !== undefined) {
         openTimer(
           stages[chosenStage].methods[
             Number(b.dataset.method)
@@ -4602,9 +5223,7 @@ const StudyMonthly = (() => {
         return;
       }
 
-      if (
-        b.dataset.remove !== undefined
-      ) {
+      if (b.dataset.remove !== undefined) {
         const list = classes();
 
         list.splice(
@@ -4629,15 +5248,10 @@ const StudyMonthly = (() => {
         return;
       }
 
-      if (
-        b.dataset.reflectionClass
-      ) {
+      if (b.dataset.reflectionClass) {
         openReflection({
-          className:
-            b.dataset.reflectionClass,
-
-          weekStart:
-            b.dataset.week
+          className: b.dataset.reflectionClass,
+          weekStart: b.dataset.week
         });
 
         return;
@@ -4725,18 +5339,13 @@ const StudyMonthly = (() => {
           break;
 
         case "toggle-timer":
-          if (
-            active.runningSince !== null
-          ) {
+          if (active.runningSince !== null) {
             pause();
 
           } else {
-            active.runningSince =
-              Date.now();
+            active.runningSince = Date.now();
 
-            if (
-              !active.startedAt
-            ) {
+            if (!active.startedAt) {
               active.startedAt =
                 new Date().toISOString();
             }
@@ -4779,7 +5388,6 @@ const StudyMonthly = (() => {
 
           chosenStage = completed.stage === 1
             ? 2
-
             : completed.stage === 2
               ? 3
               : null;
@@ -4827,7 +5435,6 @@ const StudyMonthly = (() => {
 
   document.addEventListener(
     "visibilitychange",
-
     safe(() => {
       if (
         document.visibilityState === "hidden"
@@ -4850,9 +5457,10 @@ const StudyMonthly = (() => {
 
   window.addEventListener(
     "pagehide",
-
     safe(() => {
-      if (active) saveActive();
+      if (active) {
+        saveActive();
+      }
     })
   );
 
@@ -4872,9 +5480,7 @@ const StudyMonthly = (() => {
         }
       }
 
-      if (
-        lastDay !== today()
-      ) {
+      if (lastDay !== today()) {
         lastDay = today();
         reminderDismissed = false;
 
@@ -4886,7 +5492,6 @@ const StudyMonthly = (() => {
         }
       }
     }),
-
     1000
   );
 
@@ -4897,7 +5502,6 @@ const StudyMonthly = (() => {
 
   window.addEventListener(
     "storage",
-
     safe(e => {
       if (
         [
@@ -4922,6 +5526,7 @@ const StudyMonthly = (() => {
       "<h2>Your saved data needs attention</h2><p>" +
       esc(err.message) +
       "</p>" +
+
       '<button class="primary" data-action="export">' +
       "Export a recovery backup</button></section>";
 
