@@ -473,6 +473,65 @@ return Object.assign(analyze(name,weeks,refs,history,owner,today),{complete:true
 }
 return{review,recent,trend,analyze};
 })();
+// Pure, shared backup merge rules. Existing records are never removed by a merge.
+const RecoveryState = (() => {
+  const LIMIT = 1000000;
+  const obj = x => x && typeof x === 'object' && !Array.isArray(x);
+  const day = x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+  const seconds = x => Number.isFinite(Number(x)) && Number(x) >= 0 ? Number(x) : 0;
+  function validate(s) {
+    if (!obj(s) || s.schema !== 1 || typeof s.deviceId !== 'string' || !s.deviceId ||
+        !Array.isArray(s.classes) || !Array.isArray(s.sessions) || !obj(s.reflections) || !obj(s.history) || !obj(s.anki))
+      throw new Error('Invalid recovery backup. Nothing has been replaced.');
+    if (JSON.stringify(s).length > LIMIT) throw new Error('Backup is too large. Export a file backup and contact your teacher.');
+    s.classes.forEach(c => {if (!obj(c) || typeof c.name !== 'string' || !c.name || c.name.length > 150) throw new Error('Invalid saved class.');});
+    s.sessions.forEach(r => {if (!obj(r) || ![1,2,3].includes(Number(r.stage)) || typeof r.className !== 'string' ||
+      !Number.isFinite(Date.parse(r.timestamp)) || (r.id && typeof r.id !== 'string')) throw new Error('Invalid saved study stage.');});
+    [s.reflections,s.history].forEach(map => Object.values(map).forEach(r => {
+      if (!obj(r) || typeof r.className !== 'string' || !day(r.weekStart) || !Number.isFinite(Date.parse(r.timestamp)))
+        throw new Error('Invalid saved check-in.');
+    }));
+    return JSON.parse(JSON.stringify(s));
+  }
+  function merge(a,b) {
+    b=validate(b); if (!a) return b; a=validate(a);
+    if (a.deviceId !== b.deviceId) throw new Error('These backups belong to different trackers.');
+    const out=JSON.parse(JSON.stringify(a));
+    const classes=new Map(a.classes.map(c=>[c.name.toLowerCase(),c]));
+    b.classes.forEach(c=>{if(!classes.has(c.name.toLowerCase()))classes.set(c.name.toLowerCase(),c);});
+    out.classes=[...classes.values()];
+    const stages=new Map();
+    [...a.sessions,...b.sessions].forEach(r=>{
+      const key=r.id ? 'id:'+r.id : JSON.stringify([r.timestamp,r.className,r.stage,r.method]);
+      const old=stages.get(key);
+      if(!old){stages.set(key,r);return;}
+      const newer=seconds(r.studySeconds)+seconds(r.crosscheckSeconds)>=seconds(old.studySeconds)+seconds(old.crosscheckSeconds)?r:old;
+      const merged=Object.assign({},old,newer);
+      merged.studySeconds=Math.max(seconds(old.studySeconds),seconds(r.studySeconds));
+      merged.crosscheckSeconds=Math.max(seconds(old.crosscheckSeconds),seconds(r.crosscheckSeconds));
+      merged.totalSeconds=merged.studySeconds+merged.crosscheckSeconds;
+      if(merged.crosscheckSeconds>0)merged.crosscheckSkipped=false;
+      merged.visitId=merged.visitId||old.visitId||r.visitId||'';
+      merged.startedAt=merged.startedAt||old.startedAt||r.startedAt||'';
+      merged.crosscheckFinishedAt=merged.crosscheckFinishedAt||old.crosscheckFinishedAt||r.crosscheckFinishedAt||'';
+      stages.set(key,merged);
+    });
+    out.sessions=[...stages.values()].sort((x,y)=>String(x.timestamp).localeCompare(String(y.timestamp)));
+    ['reflections','history'].forEach(field=>{
+      out[field]=Object.assign({},a[field]);
+      Object.entries(b[field]).forEach(([k,r])=>{
+        if(!out[field][k]||Date.parse(r.timestamp)>Date.parse(out[field][k].timestamp))out[field][k]=r;
+      });
+    });
+    out.anki=Object.assign({},a.anki,b.anki);
+    const starts=[a.startWeek,b.startWeek].filter(day).sort(); out.startWeek=starts[0]||'';
+    // An old cloud timer must never override a live local timer.
+    out.active=b.active||null;
+    return validate(out);
+  }
+  return {LIMIT,validate,merge};
+})();
+
 (()=>{"use strict";
 const K={classes:"studySystem.classes.v4",sessions:"studySystem.sessions.v4",device:"studySystem.deviceId.v4",submissions:"studySystem.weeklySubmissions.v4",ankiDone:"studySystem.ankiDone.v4.",ankiHide:"studySystem.ankiDismiss.v4.",reflections:"studySystem.weeklyReflections.v1",start:"studySystem.reflectionStartWeek.v1",active:"studySystem.activeSession.v1",queue:"studySystem.outbox.v1",sync:"studySystem.syncReceipts.v1",backup:"studySystem.preCoachBackup.v1",history:"studySystem.reflectionHistory.v1"};
 const C=StudyCoach;
@@ -500,6 +559,208 @@ let storageBlocked=false;
 let lastCheckpoint=Date.now();
 let active=null;
 let launchAnki=false;
+// Five-digit code is a recovery lookup. Routine backup writes use a separate secret.
+const RK='studySystem.recovery.v1';
+
+// A local snapshot is a fallback for missing/corrupt keys, never a cloud identity merge.
+const SAFETY='studySystem.localSafety.v1';
+const DAMAGED='studySystem.damagedRecords.v1';
+let safetyDb=null,safetyReady=false,safetyTimer=null,safetyWriting=Promise.resolve();
+let safetyNotice='',storageProtection='';
+let logClass='',logWeek='',logPage=0;
+function safetyKey(key){return key.startsWith('studySystem.')&&![SAFETY,DAMAGED,K.backup,'studySystem.beforeRestore.v1'].includes(key);}
+function validateSafety(snapshot){
+  if(!snapshot||snapshot.format!=='Study System Local Safety'||!snapshot.data||typeof snapshot.data!=='object'||Array.isArray(snapshot.data)||!Number.isFinite(snapshot.savedAt))throw new Error('Invalid local safety copy.');
+  const d=snapshot.data;
+  Object.entries(d).forEach(([k,v])=>{if(!safetyKey(k)||typeof v!=='string')throw new Error('Invalid safety record.');});
+  [K.classes,K.sessions].forEach(k=>{if(d[k]!==undefined&&!Array.isArray(JSON.parse(d[k])))throw new Error('Invalid saved list.');});
+  [K.reflections,K.history,K.queue,K.sync,K.active,RK].forEach(k=>{if(d[k]!==undefined){const v=JSON.parse(d[k]);if(k===K.queue){if(!Array.isArray(v))throw new Error('Invalid upload list.');}else if(v!==null&&(typeof v!=='object'||Array.isArray(v)))throw new Error('Invalid saved record.');}});
+  if(!d[K.device])throw new Error('Safety copy has no tracker ID.');
+  return snapshot;
+}
+function safetySnapshot(){const data={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(safetyKey(k))data[k]=localStorage.getItem(k);}
+  return validateSafety({format:'Study System Local Safety',savedAt:Date.now(),data});}
+function localSafety(){try{const raw=localStorage.getItem(SAFETY);return raw?validateSafety(JSON.parse(raw)):null;}catch(e){return null;}}
+function queueSafetyMirror(snapshot){if(!safetyDb)return;
+  // Serialize writes so an older asynchronous write cannot replace a newer one.
+  safetyWriting=safetyWriting.catch(()=>{}).then(()=>new Promise(resolve=>{try{const tx=safetyDb.transaction('snapshots','readwrite');tx.objectStore('snapshots').put(snapshot,'current');tx.oncomplete=resolve;tx.onerror=()=>{safetyNotice='The extra device backup is unavailable. Keep your recovery code and a file backup.';resolve();};tx.onabort=tx.onerror;}catch(e){resolve();}}));
+}
+function checkpointSafety(immediate=false){if(!safetyReady||storageBlocked||recoveryRestoring)return;
+  clearTimeout(safetyTimer);
+  const save=()=>{try{const snapshot=safetySnapshot();try{localStorage.setItem(SAFETY,JSON.stringify(snapshot));}catch(e){safetyNotice='Your records are saved, but the extra local copy could not be updated. Export a backup and free device space.';}queueSafetyMirror(snapshot);}catch(e){/* Never replace a valid fallback with malformed primary records. */}};
+  if(immediate)save();else safetyTimer=setTimeout(save,750);
+}
+function restoreSafety(snapshot){if(!snapshot)return 0;
+  const currentId=localStorage.getItem(K.device),backupId=snapshot.data[K.device];
+  if(currentId&&currentId!==backupId)return 0;
+  // A populated browser with an unidentified owner must not acquire another identity.
+  if(!currentId){const r=localStorage.getItem(RK);let owner='';try{owner=r?JSON.parse(r).profileId:'';}catch(e){}
+    if(owner&&owner!==backupId)return 0;
+    const primaryClasses=localStorage.getItem(K.classes);
+    if(!owner&&primaryClasses&&primaryClasses!==snapshot.data[K.classes])return 0;
+  }
+  const repairs=[];
+  Object.entries(snapshot.data).forEach(([k,v])=>{const raw=localStorage.getItem(k);let bad=false;
+    if(raw!==null&&[K.classes,K.sessions,K.reflections,K.history,K.queue,K.sync,K.active,RK].includes(k)){
+      try{const parsed=JSON.parse(raw);bad=[K.classes,K.sessions,K.queue].includes(k)?!Array.isArray(parsed):parsed!==null&&(typeof parsed!=='object'||Array.isArray(parsed));}catch(e){bad=true;}}
+    // Explicit empty lists are intentional; never resurrect removed classes.
+    if(raw===null||bad)repairs.push({k,v,raw});
+  });
+  if(!repairs.length)return 0;
+  const damaged=Object.fromEntries(repairs.filter(x=>x.raw!==null).map(x=>[x.k,x.raw]));
+  if(Object.keys(damaged).length){const raw=JSON.stringify(damaged);if(raw.length>100000)throw new Error('A damaged saved record is too large to preserve automatically. Export your records before recovery.');localStorage.setItem(DAMAGED,raw);}
+  try{repairs.forEach(x=>localStorage.setItem(x.k,x.v));}catch(e){repairs.forEach(x=>{if(x.raw===null)localStorage.removeItem(x.k);else localStorage.setItem(x.k,x.raw);});throw e;}
+  return repairs.length;
+}
+function openSafetyDatabase(){if(!window.indexedDB)return Promise.resolve(null);
+  return new Promise(resolve=>{let done=false;const finish=db=>{if(done){if(db)db.close();return;}done=true;clearTimeout(timer);resolve(db);};
+    const timer=setTimeout(()=>finish(null),2000);
+    try{const request=window.indexedDB.open('studySystemSafety.v1',1);
+      request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('snapshots'))request.result.createObjectStore('snapshots');};
+      request.onsuccess=()=>finish(request.result);request.onerror=()=>finish(null);request.onblocked=()=>finish(null);
+    }catch(e){finish(null);}
+  });
+}
+function readSafetyMirror(db){if(!db)return Promise.resolve(null);
+  return new Promise(resolve=>{let done=false;const finish=value=>{if(done)return;done=true;clearTimeout(timer);try{resolve(value?validateSafety(value):null);}catch(e){resolve(null);}};
+    const timer=setTimeout(()=>finish(null),2000);
+    try{const request=db.transaction('snapshots','readonly').objectStore('snapshots').get('current');request.onsuccess=()=>finish(request.result);request.onerror=()=>finish(null);}catch(e){finish(null);}
+  });
+}
+function storageStatus(){return '<section class="notice"><h3>Keep this tracker on your Chromebook</h3><p>Use this same website in your regular Chrome profile. Guest and Incognito sessions can lose their local records. Save your recovery code outside the browser.</p><p class="small">'+esc(safetyNotice||'A second local copy helps restore missing records. A confirmed cloud backup is needed if all site data is cleared.')+'</p><button type="button" class="secondary" data-action="protect-storage">Protect saved data on this device</button><p id="storageProtectionStatus" role="status">'+esc(storageProtection)+'</p></section>';}
+async function protectStorage(){try{if(!navigator.storage||!navigator.storage.persist){storageProtection='This browser does not offer persistent storage. Keep your code and export a backup.';}else{const granted=await navigator.storage.persist();storageProtection=granted?'Persistent storage granted. Clearing site data or school policies can still remove it.':'The browser did not grant persistent storage. Your records still save; keep your code and a file backup.';}}catch(e){storageProtection='Storage protection is unavailable here. Keep your recovery code and a file backup.';}
+  const target=document.getElementById('storageProtectionStatus');if(target)target.textContent=storageProtection;}
+function recoverMissingClasses(){if(localStorage.getItem(K.classes)!==null||!localStorage.getItem(K.device))return;
+  const saved=read(K.sessions,[]);if(!Array.isArray(saved))return;
+  const names=new Map();saved.forEach(r=>{if(r&&typeof r.className==='string'&&r.className.trim())names.set(r.className,{name:r.className,subject:typeof r.subject==='string'?r.subject:''});});
+  if(names.size){write(K.classes,[...names.values()]);safetyNotice='Recovered your class list from the study history still saved on this device.';}
+}
+function startApp(){try{init();safetyReady=true;checkpointSafety(true);if(safetyNotice)message(safetyNotice);}catch(err){root.innerHTML='<section class="card"><h2>Your saved data needs attention</h2><p>'+esc(err.message)+'</p><button class="primary" data-action="export">Export a recovery backup</button></section>';message('Nothing has been erased.');}}
+function bootApp(){const local=localSafety();
+  if(!window.indexedDB){try{if(restoreSafety(local))safetyNotice='Restored missing records from the extra device copy. Your saved classes and history are available again.';}catch(e){safetyNotice=e.message;}startApp();return;}
+  root.innerHTML='<section class="card"><h2>Opening your saved tracker…</h2></section>';
+  openSafetyDatabase().then(async db=>{safetyDb=db;const mirror=await readSafetyMirror(db);const candidate=mirror&&(!local||mirror.savedAt>local.savedAt)?mirror:local;
+    try{if(restoreSafety(candidate))safetyNotice='Restored missing records from the extra device copy. Your saved classes and history are available again.';}catch(e){safetyNotice=e.message;}
+    startApp();});
+}
+
+let recoveryBusy=false,recoveryRestoring=false,recoveryTimer=null,recoveryPreview=null;
+let recoveryError='',recoveryLastAttempt=0,recoveryInFlight='';
+function recoverySecret(){if(!window.crypto||!crypto.getRandomValues)throw new Error('This browser cannot create a secure backup credential. Use a current browser.');
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');}
+function recoveryIdentity(){let r=read(RK,null);if(!r){r={writerSecret:recoverySecret(),clientId:uid(),profileId:'',code:'',lastSaved:'',fingerprint:''};write(RK,r);}return r;}
+function recoveryHasData(){return classes().length>0||sessions().length>0||historyList().length>0||!!read(K.active,null);}
+function recoverySnapshot(){const anki={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key.startsWith(K.ankiDone)||key.startsWith(K.ankiHide))anki[key]=localStorage.getItem(key);}
+  return RecoveryState.validate({schema:1,deviceId:deviceId(),classes:classes(),sessions:sessions(),reflections:reflections(),history:reflectionHistory(),startWeek:localStorage.getItem(K.start)||'',anki,active:read(K.active,null)});}
+function scheduleRecovery(key=''){if(key===RK||recoveryRestoring||storageBlocked)return;
+  if(key&&![K.classes,K.sessions,K.reflections,K.history,K.start,K.active].includes(key)&&!key.startsWith(K.ankiDone)&&!key.startsWith(K.ankiHide))return;
+  clearTimeout(recoveryTimer);
+  recoveryTimer=setTimeout(()=>syncRecovery(),Math.max(1500,20000-(Date.now()-recoveryLastAttempt)));
+}
+function recoveryBanner(){
+  let panel=document.getElementById('recoveryStatusPanel');
+  if(!panel){panel=document.createElement('section');panel.id='recoveryStatusPanel';panel.className='notice';root.before(panel);}
+  let r;try{r=read(RK,null);}catch(e){return;}
+  const code=r&&r.code;
+  const saved=r&&r.lastSaved;
+  panel.innerHTML='<strong>'+(code?'Your recovery code: '+esc(code):'Setting up your recovery code')+'</strong> '+
+    '<button type="button" class="text-button" data-nav="backup">Backup & Recovery</button>'+ 
+    '<p class="small">'+esc(recoveryError?'Backup pending: '+recoveryError:
+      recoveryBusy?'Saving a cloud backup…':saved?'Cloud backup confirmed '+new Date(saved).toLocaleString()+'.':
+      navigator.onLine?'Waiting for the first confirmed cloud backup.':'Offline. Your code and backup will be confirmed when you reconnect.')+'</p>'+
+    (code&&!r.codeSeen?'<p>Save this five-digit code somewhere outside this browser. You need it if your data disappears or you change devices.</p><button type="button" class="secondary" data-action="recovery-code-seen">I saved my code</button>':'');
+}
+async function syncRecovery(force=false){
+  if(recoveryBusy||recoveryRestoring||storageBlocked||!navigator.onLine)return;
+  recoveryBusy=true;recoveryLastAttempt=Date.now();recoveryError='';recoveryBanner();
+  try{
+    let identity=recoveryIdentity();
+    if(!identity.profileId){const registered=await post({action:'registerRecovery',deviceId:deviceId(),writerSecret:identity.writerSecret});
+      identity=Object.assign(identity,registered.recovery);write(RK,identity);recoveryBanner();}
+    const state=recoverySnapshot(),fingerprint=JSON.stringify(state);
+    // Fingerprint stores a short hash, not a duplicate of the student's history.
+    const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint))),x=>x.toString(16).padStart(2,'0')).join('');
+    if(force||digest!==identity.fingerprint||!identity.lastSaved){
+      recoveryInFlight=digest;
+      const response=await post({action:'saveRecoveryBackup',profileId:identity.profileId,writerSecret:identity.writerSecret,backupJson:fingerprint});
+      identity=Object.assign(identity,response.recovery,{fingerprint:digest,lastSaved:response.recovery.updatedAt});write(RK,identity);
+    }
+  }catch(e){recoveryError=e.message;}finally{recoveryBusy=false;recoveryInFlight='';recoveryBanner();}
+}
+function renderCloudRecovery(){
+  const r=recoveryIdentity();
+  return '<section class="card"><span class="eyebrow">CLOUD BACKUP & RECOVERY</span><h2>'+
+    (r.code?'Your recovery code: '+esc(r.code):'Your code is being assigned')+'</h2>'+
+    '<p>Save your code outside this browser. Existing classes, sessions and check-ins are preserved and backed up automatically when you are online.</p>'+
+    '<p class="small">'+esc(r.lastSaved?'Last confirmed backup: '+new Date(r.lastSaved).toLocaleString(): 'No cloud backup confirmed yet. Keep your file backup until the first save is confirmed.')+'</p>'+
+    '<button type="button" class="primary" data-action="cloud-backup-now">Back up now</button>'+
+    '<h3>Recover saved data</h3><label class="field" for="recoveryCodeInput">Your five-digit recovery code</label>'+
+    '<input id="recoveryCodeInput" type="text" inputmode="numeric" pattern="[1-9][0-9]{4}" maxlength="5" autocomplete="off" placeholder="48271">'+
+    '<button type="button" class="secondary" data-action="cloud-preview">Find my backup</button>'+
+    '<div id="recoveryPreview" aria-live="polite"></div><p id="recoveryError" role="alert"></p></section>';
+}
+function recoveryMessage(text){const e=document.getElementById('recoveryError');if(e)e.textContent=text;else message(text);}
+async function previewCloudRecovery(){
+  if(recoveryBusy||recoveryRestoring){recoveryMessage('Wait for the current cloud backup to finish, then try again.');return;}
+  const code=document.getElementById('recoveryCodeInput').value.trim();
+  if(!/^[1-9][0-9]{4}$/.test(code)){recoveryMessage('Enter your five-digit code.');return;}
+  recoveryMessage('Looking up your saved backup…');recoveryPreview=null;
+  try{const identity=recoveryIdentity();const response=await post({action:'previewRecovery',code,recoveryClientId:identity.clientId});
+    recoveryPreview=Object.assign({},response.recovery,{forkDeviceId:uid()});
+    if(recoveryHasData()&&deviceId()!==recoveryPreview.profileId){recoveryPreview=null;throw new Error('This browser already contains a different tracker. Export it first, then use an empty browser profile to recover the other code without mixing students.');}
+    document.getElementById('recoveryPreview').innerHTML='<h3>Check that this is yours</h3><p>Classes: '+
+      (recoveryPreview.classes.length?recoveryPreview.classes.map(esc).join(', '):'No classes saved yet')+'</p><p>'+recoveryPreview.stageCount+
+      ' saved stages · '+recoveryPreview.checkinCount+' weekly check-ins</p><p class="small">Backed up '+esc(new Date(recoveryPreview.updatedAt).toLocaleString())+
+      '</p><button type="button" class="primary" data-action="cloud-restore-confirm">Yes, restore my data</button>';
+    recoveryMessage('Recovery creates a separate tracker and a new five-digit code. Your original backup stays unchanged; save the NEW code for future recovery.');
+  }catch(e){recoveryMessage(e.message);}
+}
+async function restoreCloudRecovery(){
+  if(!recoveryPreview||recoveryBusy||recoveryRestoring)return;
+  recoveryRestoring=true;clearTimeout(recoveryTimer);recoveryMessage('Restoring your saved data…');
+  try{
+    const identity=recoveryIdentity();
+    const response=await post({action:'restoreRecovery',ticket:recoveryPreview.ticket,recoveryClientId:identity.clientId,writerSecret:identity.writerSecret,forkDeviceId:recoveryPreview.forkDeviceId});
+    const cloud=RecoveryState.validate(response.recovery.backup);
+    const sourceId=response.recovery.sourceProfileId;
+    if(recoveryHasData()&&deviceId()!==sourceId)throw new Error('Different tracker detected. Current records have not been changed.');
+    let local=recoveryHasData()?recoverySnapshot():null;
+    if(local){local.deviceId=cloud.deviceId;local.sessions=local.sessions.map(r=>Object.assign({},r,{recoveredArchive:true,recoveredFromProfile:sourceId}));['reflections','history'].forEach(field=>Object.entries(local[field]).forEach(([k,r])=>{local[field][k]=Object.assign({},r,{ownerDeviceId:cloud.deviceId,recoveredArchive:true,recoveredFromProfile:sourceId});}));}
+    const merged=RecoveryState.merge(cloud,local||cloud);
+    // One local checkpoint plus rollback protects against a mid-restore storage error.
+    const updates={
+      [K.classes]:JSON.stringify(merged.classes),[K.sessions]:JSON.stringify(merged.sessions),
+      [K.reflections]:JSON.stringify(merged.reflections),[K.history]:JSON.stringify(merged.history),
+      [K.device]:cloud.deviceId,[K.start]:merged.startWeek,[K.queue]:'[]',[K.sync]:'{}',
+      [RK]:JSON.stringify(Object.assign(identity,response.recovery,{backup:undefined,fingerprint:'',lastSaved:response.recovery.updatedAt,codeSeen:false}))
+    };
+    Object.entries(merged.anki).forEach(([k,v])=>{if(k.startsWith(K.ankiDone)||k.startsWith(K.ankiHide))updates[k]=v;});
+    if(merged.active){const restored=Object.assign({},merged.active);if(restored.runningSince!==null){restored.ms+=Math.max(0,(restored.lastSeen||restored.runningSince)-restored.runningSince);restored.runningSince=null;}updates[K.active]=JSON.stringify(restored);}
+    const original=Object.fromEntries(Object.keys(updates).map(k=>[k,localStorage.getItem(k)]));
+    write('studySystem.beforeRestore.v1',backupData());
+    try{Object.entries(updates).forEach(([k,v])=>localStorage.setItem(k,v));}
+    catch(e){Object.entries(original).forEach(([k,v])=>{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v);});throw new Error('This browser could not store the recovered data. Original records were restored; export a backup and free device space.');}
+    active=read(K.active,null);if(active){chosenClass={name:active.className,subject:active.subject};chosenStage=active.stage;visitId=active.visitId;}
+    recoveryPreview=null;reminderDismissed=true;screen=active?'timer':'home';render();
+    // Re-send recovered records using the original anonymous ID, retaining deduplication.
+    sessions().filter(r=>r.id).forEach(queueStage);
+    historyList().filter(r=>r.revisionId&&r.recommendation&&r.snapshot).forEach(queueReflection);
+    checkpointSafety(true);
+    message('Your history was restored into a separate tracker. Save your NEW recovery code: '+response.recovery.code+'. Your original backup stays unchanged.');
+  }catch(e){recoveryMessage(e.message);}finally{recoveryRestoring=false;checkpointSafety(true);scheduleRecovery();recoveryBanner();}
+}
+document.addEventListener('click',e=>{
+  const button=e.target.closest('button');if(!button)return;
+  const action=button.dataset.action;
+  if(action==='recovery-code-seen'){try{const r=recoveryIdentity();r.codeSeen=true;write(RK,r);recoveryBanner();}catch(error){message(error.message);}}
+  if(action==='cloud-backup-now'){syncRecovery(true);}
+  if(action==='cloud-preview'){previewCloudRecovery();}
+  if(action==='cloud-restore-confirm'){restoreCloudRecovery();}
+});
+window.addEventListener('online',()=>{scheduleRecovery();recoveryBanner();});
+setInterval(()=>{if(!recoveryRestoring)syncRecovery();},60000);
+// The unload event is not relied upon for network saves: changes back up while open.
+
 function read(k,fallback){try{const raw=localStorage.getItem(k);
 return raw===null?fallback:JSON.parse(raw);
 }catch(e){storageBlocked=true;
@@ -507,10 +768,12 @@ throw new Error("Saved data could not be read. Do not clear site data. "+"Export
 }
 }
 function write(k,v){try{localStorage.setItem(k,JSON.stringify(v));
+scheduleRecovery(k);checkpointSafety();
 }catch(e){throw new Error("This browser could not save data. Free device space or "+"export a backup; do not clear this site's storage.");
 }
 }
 function rawWrite(k,v){try{localStorage.setItem(k,v);
+scheduleRecovery(k);checkpointSafety();
 }catch(e){throw new Error("Unable to save on this device. Please export a backup.");
 }
 }
@@ -638,15 +901,33 @@ const out=[];
 });
 return out;
 }
+const AWAY_MS=30*60000,CAP_MS=3*3600000;
+function rawElapsed(){return active?Math.max(0,Number(active.ms)||0)+(active.runningSince!==null?Math.max(0,Date.now()-active.runningSince):0):0;
+}
+function markAway(){if(active&&active.runningSince!==null&&!active.awayAt){active.awayAt=Date.now();active.awayElapsed=elapsed();
+}
+}
+function checkReturn(){if(!active)return;
+if(active.runningSince===null){active.awayAt=null;return;
+}
+if(active.awayAt){if(Date.now()-active.awayAt>=AWAY_MS&&!active.awayPrompt){active.awayPrompt={at:active.awayAt,elapsed:Math.max(0,Number(active.awayElapsed)||0)};
+}
+active.awayAt=null;
+}
+}
+function awayHtml(){if(!active||!active.awayPrompt)return"";
+return'<div class="notice"><strong>You were away for '+human((Date.now()-active.awayPrompt.at)/1000)+'.</strong><p class="small">Were you studying the whole time?</p><div class="actions"><button class="primary" data-action="away-trim">No, count only until I left</button><button class="secondary" data-action="away-keep">Yes, keep all the time</button></div></div>';
+}
 function saveActive(){if(active){active.lastSeen=Date.now();
 write(K.active,active);
-}else{localStorage.removeItem(K.active);
+}else{write(K.active,null);
 }
 }
-function elapsed(){return active?active.ms+(active.runningSince!==null?Date.now()-active.runningSince:0):0;
+function elapsed(){return Math.min(CAP_MS,rawElapsed());
 }
 function pause(){if(active&&active.runningSince!==null){active.ms=elapsed();
 active.runningSince=null;
+active.awayAt=null;
 saveActive();
 }
 }
@@ -656,7 +937,7 @@ return;
 screen=to;
 render();
 }
-function render(){$("navigation").innerHTML=active?'<span class="small">Session in progress</span>':'<button class="text-button" data-nav="home">Study</button>'+'<button class="text-button" data-nav="progress">Progress</button>'+'<button class="text-button" data-nav="backup">Backup</button>';
+function render(){$("navigation").innerHTML=active?'<span class="small">Session in progress</span>':'<button class="text-button" data-nav="home">Study</button>'+'<button class="text-button" data-nav="progress">Progress</button>'+'<button class="text-button" data-nav="log">Study Log</button>'+'<button class="text-button" data-nav="backup">Backup & Recovery</button>';
 if(active)screen="timer";
 if(screen==="home"&&!classes().length){screen="classes";
 }
@@ -665,10 +946,12 @@ if(screen==="classes"){renderClasses();
 }else if(screen==="timer"){renderTimer();
 }else if(screen==="complete"){renderComplete();
 }else if(screen==="progress"){renderProgress();
+}else if(screen==="log"){renderStudyLog();
 }else if(screen==="backup"){renderBackup();
 }else{renderHome();
 }
 updateSync();
+recoveryBanner();
 }
 function renderHome(){const due=pending();
 const anki=ankiDue();
@@ -683,7 +966,7 @@ classes().forEach((c,i)=>{s+='<button class="class-button" data-class="'+i+'">'+
 root.innerHTML=s+"</div></section>";
 maybePrompt();
 }
-function renderClasses(){root.innerHTML='<section class="card">'+'<span class="eyebrow">SAVED ON THIS DEVICE</span>'+"<h2>Set up your classes</h2>"+'<p class="muted">'+"Add once; choose them for future study visits.</p>"+'<label class="field" for="subject">Subject</label>'+'<select id="subject">'+'<option value="">Choose a subject</option>'+Object.keys(catalog).map(x=>"<option>"+esc(x)+"</option>").join("")+"</select>"+'<label class="field" for="course">Class</label>'+'<select id="course">'+'<option value="">Choose a subject first</option>'+"</select>"+'<div id="customWrap" hidden>'+'<label class="field" for="custom">Your class name</label>'+'<input id="custom" type="text" maxlength="100" '+'placeholder="Class name, not your name">'+"</div>"+'<div class="actions">'+'<button class="primary" data-action="add-class">'+"Add class</button></div></section>"+'<section class="card"><h3>Your saved classes</h3>'+classes().map((c,i)=>'<div class="saved-row"><div><strong>'+esc(c.name)+'</strong><div class="small">'+esc(c.subject)+"</div></div>"+'<button class="secondary" data-remove="'+i+'">Remove</button></div>').join("")+(classes().length?'<div class="actions">'+'<button class="primary" data-nav="home">'+"Done adding classes</button></div>":'<p class="muted">'+"Add at least one class to get started.</p>")+"</section>";
+function renderClasses(){root.innerHTML=(classes().length?'':'<section class="notice"><h2>Already used this tracker?</h2><p>You do not need to add your classes again. Recover your saved history with your code, or restore your exported backup file.</p><button class="primary" data-nav="backup">Recover my classes & history</button><p class="small">This works in Chrome on a Chromebook. Use your regular school profile and bookmark this page.</p></section>')+'<section class="card">'+'<span class="eyebrow">SAVED ON THIS DEVICE</span>'+"<h2>Set up your classes</h2>"+'<p class="muted">'+"Add once; choose them for future study visits.</p>"+'<label class="field" for="subject">Subject</label>'+'<select id="subject">'+'<option value="">Choose a subject</option>'+Object.keys(catalog).map(x=>"<option>"+esc(x)+"</option>").join("")+"</select>"+'<label class="field" for="course">Class</label>'+'<select id="course">'+'<option value="">Choose a subject first</option>'+"</select>"+'<div id="customWrap" hidden>'+'<label class="field" for="custom">Your class name</label>'+'<input id="custom" type="text" maxlength="100" '+'placeholder="Class name, not your name">'+"</div>"+'<div class="actions">'+'<button class="primary" data-action="add-class">'+"Add class</button></div></section>"+'<section class="card"><h3>Your saved classes</h3>'+classes().map((c,i)=>'<div class="saved-row"><div><strong>'+esc(c.name)+'</strong><div class="small">'+esc(c.subject)+"</div></div>"+'<button class="secondary" data-remove="'+i+'">Remove</button></div>').join("")+(classes().length?'<div class="actions">'+'<button class="primary" data-nav="home">'+"Done adding classes</button></div>":'<p class="muted">'+"Add at least one class to get started.</p>")+"</section>";
 $("subject").onchange=()=>{$("course").innerHTML='<option value="">Choose a class</option>'+(catalog[$("subject").value]||[]).map(x=>"<option>"+esc(x)+"</option>").join("");
 $("customWrap").hidden=true;
 };
@@ -709,7 +992,7 @@ screen="timer";
 render();
 }
 function renderTimer(){const cross=active.phase==="crosscheck";
-root.innerHTML='<section class="card timer">'+'<span class="eyebrow">'+esc(active.className)+"</span><h2>"+(cross?"Crosscheck":"Stage "+active.stage+" — "+C.stageName(active.stage))+"</h2><h3>"+esc(active.method)+'</h3><p class="muted">'+(cross?"Your Retrieval is already saved. Compare it with notes or another "+"reliable source, correct gaps, then consider a short Assess.":stages[active.stage].instruction)+"</p>"+'<div id="clock" class="clock" role="timer" '+'aria-label="Elapsed study time">'+time(elapsed()/1000)+"</div>"+'<div class="actions">'+'<button class="primary" data-action="toggle-timer">'+(active.runningSince!==null?"Pause":active.ms>0?"Resume":cross?"Start Crosscheck":"Start")+"</button>"+(active.startedAt||cross?'<button class="secondary" data-action="finish-timer">'+(cross?"Finish Crosscheck":"Finish stage")+"</button>":"")+'<button class="text-button" data-action="'+(cross?"skip-crosscheck":"cancel-timer")+'">'+(cross?"Skip Crosscheck for now":"Cancel stage")+"</button></div>"+'<p class="small">'+"Time is logged automatically. Do not enter names or grades."+"</p></section>";
+root.innerHTML='<section class="card timer">'+'<span class="eyebrow">'+esc(active.className)+"</span><h2>"+(cross?"Crosscheck":"Stage "+active.stage+" — "+C.stageName(active.stage))+"</h2><h3>"+esc(active.method)+'</h3><p class="muted">'+(cross?"Your Retrieval is already saved. Compare it with notes or another "+"reliable source, correct gaps, then consider a short Assess.":stages[active.stage].instruction)+"</p>"+awayHtml()+'<div id="clock" class="clock" role="timer" '+'aria-label="Elapsed study time">'+time(elapsed()/1000)+"</div>"+'<div class="actions">'+'<button class="primary" data-action="toggle-timer">'+(active.runningSince!==null?"Pause":active.ms>0?"Resume":cross?"Start Crosscheck":"Start")+"</button>"+(active.startedAt||cross?'<button class="secondary" data-action="finish-timer">'+(cross?"Finish Crosscheck":"Finish stage")+"</button>":"")+'<button class="text-button" data-action="'+(cross?"skip-crosscheck":"cancel-timer")+'">'+(cross?"Skip Crosscheck for now":"Cancel stage")+"</button></div>"+'<p class="small">'+"The timer keeps counting with the screen off and after reopening this browser. Press Pause when you stop studying; closing the tab does not pause it."+"</p></section>";
 }
 function persistRecord(record){const rows=sessions();
 const i=rows.findIndex(r=>(r.id&&r.id===record.id)||r.timestamp===record.timestamp);
@@ -722,6 +1005,8 @@ try{queueStage(record);
 }
 }
 function finishTimer(skip=false){if(!active)return;
+if(active.awayPrompt){message("Answer the question about your time away first.");renderTimer();return;
+}
 pause();
 if(active.phase==="study"){if(!active.startedAt){message("Start the timer before finishing.");
 return;
@@ -802,9 +1087,9 @@ const sum=d.reduce((a,b)=>a+b,0);
 d.forEach((v,k)=>{if(v<=0)return;
 const h=Math.max(2,v/max*(base-top));
 y-=h;
-svg+='<rect x="'+x+'" y="'+y.toFixed(1)+'" width="'+bw+'" height="'+(h-1).toFixed(1)+'" rx="2" fill="'+colors[k]+'">'+"<title>"+["Learn","Retrieval","Crosscheck","Assess"][k]+": "+Math.round(v)+" min</title></rect>";
+svg+='<rect x="'+x+'" y="'+y.toFixed(1)+'" width="'+bw+'" height="'+(h-1).toFixed(1)+'" rx="2" fill="'+colors[k]+'">'+"<title>"+["Learn","Retrieval","Crosscheck","Assess"][k]+": "+human(v*60)+"</title></rect>";
 });
-if(sum>0){svg+='<text x="'+(x+bw/2)+'" y="'+(y-4).toFixed(1)+'" text-anchor="middle" font-size="9" fill="'+MP_COLORS.ink+'">'+Math.round(sum)+"</text>";
+if(sum>0){svg+='<text x="'+(x+bw/2)+'" y="'+(y-4).toFixed(1)+'" text-anchor="middle" font-size="9" fill="'+MP_COLORS.ink+'">'+human(sum*60)+"</text>";
 }
 svg+='<text x="'+(x+bw/2)+'" y="'+(base+14)+'" text-anchor="middle" font-size="10" fill="'+MP_COLORS.ink+'">'+labels[i]+"</text>";
 });
@@ -813,7 +1098,7 @@ const names=["Learn","Retrieval","Crosscheck","Assess"];
 const studyOnly=totals[0]+totals[1]+totals[3];
 const topStage=[0,1,3].sort((a,b)=>totals[b]-totals[a])[0];
 const read=studyOnly?"Mostly "+names[topStage]+" ("+pct(totals[topStage],studyOnly)+" of study time). Retrieval: "+pct(totals[1],studyOnly)+"; Assess: "+pct(totals[3],studyOnly)+".":"Only Crosscheck time logged.";
-const legend='<div class="legend">'+names.map((n,k)=>'<span><i class="dot" style="background:'+colors[k]+'"></i>'+n+" "+Math.round(totals[k])+" min</span>").join("")+"</div>";
+const legend='<div class="legend">'+names.map((n,k)=>'<span><i class="dot" style="background:'+colors[k]+'"></i>'+n+" "+human(totals[k]*60)+"</span>").join("")+"</div>";
 return svg+legend+'<p class="small">'+esc(read)+"</p>";
 }
 function mpTrend(name,refs,weeks){const byWeek=new Map(refs.filter(r=>r.className===name).map(r=>[r.weekStart,r]));
@@ -902,6 +1187,23 @@ return('<section class="card my-progress">'+'<span class="eyebrow">MY PROGRESS</
 const mpStyle=document.createElement("style");
 mpStyle.textContent=".my-progress h2{margin-top:22px}"+".my-progress .mp-class{margin:14px 0 6px}"+".my-progress .mp-class h3{margin:0 0 4px}"+".my-progress .mp-row{margin:10px 0}"+".my-progress .legend span{margin-right:12px}";
 document.head.appendChild(mpStyle);
+
+function renderStudyLog(){
+  const all=sessions().slice().sort((a,b)=>String(b.timestamp).localeCompare(String(a.timestamp)));
+  const names=[...new Set(all.map(r=>r.className))].sort();
+  const weeks=[...new Set(all.map(r=>C.weekStart(C.localDay(r))))].sort().reverse();
+  const selected=all.filter(r=>(!logClass||r.className===logClass)&&(!logWeek||C.weekStart(C.localDay(r))===logWeek));
+  const pages=Math.max(1,Math.ceil(selected.length/25));logPage=Math.min(logPage,pages-1);
+  const rows=selected.slice(logPage*25,(logPage+1)*25);
+  root.innerHTML='<section class="card"><span class="eyebrow">YOUR SAVED STUDY HISTORY</span><h2>Study Log</h2><p>Use this page on your Chromebook—no phone or app installation needed. Your saved history appears in this Chrome profile. To move from another device, use Backup & Recovery first.</p>'+ 
+    '<label class="field" for="logClass">Class</label><select id="logClass"><option value="">All classes</option>'+names.map(n=>'<option value="'+esc(n)+'"'+(logClass===n?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select>'+
+    '<label class="field" for="logWeek">Week</label><select id="logWeek"><option value="">All weeks</option>'+weeks.map(w=>'<option value="'+w+'"'+(logWeek===w?' selected':'')+'>'+esc(rangeLabel(w))+'</option>').join('')+'</select>'+
+    '<p role="status">'+selected.length+' completed stages · '+human(selected.reduce((n,r)=>n+C.number(r.studySeconds)+C.number(r.crosscheckSeconds),0))+' total</p>'+
+    (rows.length?'<div class="table-wrap" style="overflow-x:auto"><table><caption>Completed study stages. Crosscheck is shown separately.</caption><thead><tr><th scope="col">Date</th><th scope="col">Class</th><th scope="col">Stage / method</th><th scope="col">Study time</th><th scope="col">Crosscheck</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(pretty(C.localDay(r)))+'</td><td>'+esc(r.className)+'</td><td>'+esc(C.stageName(Number(r.stage)))+'<br>'+esc(r.method)+(r.recoveredArchive?'<br><span class="small">Recovered history</span>':'')+'</td><td>'+human(C.number(r.studySeconds))+'</td><td>'+human(C.number(r.crosscheckSeconds))+'</td></tr>').join('')+'</tbody></table></div>':'<p>No completed stages match this selection. If you studied on another device, recover that history before adding your classes again.</p>')+
+    '<div class="actions"><button class="secondary" data-action="log-prev"'+(logPage===0?' disabled':'')+'>Previous</button><span>Page '+(logPage+1)+' of '+pages+'</span><button class="secondary" data-action="log-next"'+(logPage+1>=pages?' disabled':'')+'>Next</button></div><button class="text-button" data-nav="backup">Backup & Recovery</button></section>';
+  $('logClass').onchange=()=>{logClass=$('logClass').value;logPage=0;renderStudyLog();};
+  $('logWeek').onchange=()=>{logWeek=$('logWeek').value;logPage=0;renderStudyLog();};
+}
 function renderProgress(){const rows=sessions();
 const now=today();
 const keys=new Set([periodKind==="week"?C.weekStart(now):C.monthStart(now)]);
@@ -1037,9 +1339,9 @@ write(K.queue,queue);
 updateSync();
 setTimeout(()=>syncQueue(),0);
 }
-function queueStage(r){enqueue("stage:"+deviceId()+":"+r.timestamp,{action:"submitStage",deviceId:deviceId(),sessionId:r.id||"",visitId:r.visitId||"",startedAt:r.startedAt||"",timestamp:r.timestamp,localDate:C.localDay(r),className:r.className,subject:r.subject||"",stage:r.stage,stageName:C.stageName(Number(r.stage)),method:r.method,studySeconds:r.studySeconds||0,crosscheckSeconds:r.crosscheckSeconds||0,crosscheckFinishedAt:r.crosscheckFinishedAt||"",totalSeconds:C.number(r.studySeconds)+C.number(r.crosscheckSeconds)});
+function queueStage(r){if(r.recoveredArchive)return;enqueue("stage:"+deviceId()+":"+r.timestamp,{action:"submitStage",deviceId:deviceId(),sessionId:r.id||"",visitId:r.visitId||"",startedAt:r.startedAt||"",timestamp:r.timestamp,localDate:C.localDay(r),className:r.className,subject:r.subject||"",stage:r.stage,stageName:C.stageName(Number(r.stage)),method:r.method,studySeconds:r.studySeconds||0,crosscheckSeconds:r.crosscheckSeconds||0,crosscheckFinishedAt:r.crosscheckFinishedAt||"",totalSeconds:C.number(r.studySeconds)+C.number(r.crosscheckSeconds)});
 }
-function queueReflection(r){enqueue("reflection:"+deviceId()+":"+C.key(r.weekStart,r.className)+(r.followup?":"+r.revisionId:""),{action:"submitReflection",deviceId:deviceId(),weekStart:r.weekStart,className:r.className,timestamp:r.timestamp,revisionId:r.revisionId,learningRating:r.learningRating,hadAssessment:r.hadAssessment,assessmentRating:r.hadAssessment?r.assessmentRating:"",snapshotJson:JSON.stringify(r.snapshot),recommendationCode:r.recommendation.code,recommendationText:r.recommendation.text,ruleVersion:r.recommendation.version});
+function queueReflection(r){if(r.recoveredArchive)return;enqueue("reflection:"+deviceId()+":"+C.key(r.weekStart,r.className)+(r.followup?":"+r.revisionId:""),{action:"submitReflection",deviceId:deviceId(),weekStart:r.weekStart,className:r.className,timestamp:r.timestamp,revisionId:r.revisionId,learningRating:r.learningRating,hadAssessment:r.hadAssessment,assessmentRating:r.hadAssessment?r.assessmentRating:"",snapshotJson:JSON.stringify(r.snapshot),recommendationCode:r.recommendation.code,recommendationText:r.recommendation.text,ruleVersion:r.recommendation.version});
 }
 function updateSync(){let queue=[];
 try{queue=read(K.queue,[]);
@@ -1064,7 +1366,7 @@ form.method="POST";
 form.action=endpoint;
 form.target=frame.name;
 form.hidden=true;
-Object.entries(Object.assign({},payload,{requestId,replyOrigin:location.origin})).forEach(([k,v])=>{const input=document.createElement("input");
+Object.entries(Object.assign({},payload,{requestId,replyOrigin:location.origin,writerSecret:recoveryIdentity().writerSecret})).forEach(([k,v])=>{const input=document.createElement("input");
 input.type="hidden";
 input.name=k;
 input.value=String(v??"");
@@ -1091,7 +1393,7 @@ document.body.append(frame,form);
 form.submit();
 });
 }
-async function syncQueue(force=false){if(syncBusy||storageBlocked||!navigator.onLine){return;
+async function syncQueue(force=false){if(syncBusy||recoveryRestoring||storageBlocked||!navigator.onLine){return;
 }
 try{const queue=read(K.queue,[]);
 const q=queue.find(x=>force||!x.nextTry||x.nextTry<=Date.now());
@@ -1123,7 +1425,7 @@ message(e.message);
 }
 }
 function shareWeek(){const end=C.addDays(periodKey,7);
-const s=C.summarize(sessions().filter(r=>C.localDay(r)>=periodKey&&C.localDay(r)<end));
+const s=C.summarize(sessions().filter(r=>!r.recoveredArchive&&C.localDay(r)>=periodKey&&C.localDay(r)<end));
 if(!s.count){message("There is no activity to share for this week.");
 return;
 }
@@ -1135,7 +1437,7 @@ message("Weekly summary queued. The sync bar shows when Google confirms it.");
 }
 function backupData(){const data={};
 for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);
-if(key.startsWith("studySystem.")&&key!==K.backup&&key!=="studySystem.beforeRestore.v1"){data[key]=localStorage.getItem(key);
+if(key.startsWith("studySystem.")&&key!==K.backup&&key!=="studySystem.beforeRestore.v1"&&key!==SAFETY){data[key]=localStorage.getItem(key);
 }
 }
 return{format:"Study System Backup",version:1,exportedAt:new Date().toISOString(),data};
@@ -1149,7 +1451,7 @@ setTimeout(()=>{URL.revokeObjectURL(a.href);
 },5000);
 message("Backup exported. Keep it somewhere safe.");
 }
-function renderBackup(){root.innerHTML='<section class="card">'+"<h2>Keep your study history safe</h2>"+"<p>This update uses your existing v4 classes, sessions, and "+"anonymous device ID. New check-ins are stored separately.</p>"+'<p class="muted">'+"A browser update does not transfer data between devices, "+"browsers, or Home Screen apps. Clearing site data can "+"remove the local copy. Export a backup first.</p>"+'<div class="actions">'+'<button class="primary" data-action="export">'+"Export my backup</button>"+'<button class="secondary" data-action="import">'+"Restore / merge a backup</button></div>"+'<p class="small">'+"Restoring merges records; it does not erase your current records. "+"Backups from a different device ID are accepted only when this "+"device has no study history or classes.</p></section>";
+function renderBackup(){root.innerHTML=renderCloudRecovery()+storageStatus()+'<section class="card">'+"<h2>Keep your study history safe</h2>"+"<p>This update uses your existing v4 classes, sessions, and "+"anonymous device ID. New check-ins are stored separately.</p>"+'<p class="muted">'+"A browser update does not transfer data between devices, "+"browsers, or Home Screen apps. Clearing site data can "+"remove the local copy. Export a backup first.</p>"+'<div class="actions">'+'<button class="primary" data-action="export">'+"Export my backup</button>"+'<button class="secondary" data-action="import">'+"Restore / merge a backup</button></div>"+'<p class="small">'+"Restoring merges records; it does not erase your current records. "+"Backups from a different device ID are accepted only when this "+"device has no study history or classes.</p></section>";
 }
 $("backupInput").onchange=async e=>{try{const file=e.target.files[0];
 if(!file)return;
@@ -1212,8 +1514,9 @@ render();
 }
 e.target.value="";
 };
-function init(){const versionLabel=document.getElementById("coachVersion");
-if(versionLabel){versionLabel.textContent="Learning-first coaching · "+CoachRules.version+" · my-progress-20261012-3";
+function init(){recoverMissingClasses();
+const versionLabel=document.getElementById("coachVersion");
+if(versionLabel){versionLabel.textContent="Learning-first coaching · "+CoachRules.version+" · my-progress-20261012-5 · recovery-20261012-2 · reliable-timer-20261012-2";
 }
 classes();
 sessions();
@@ -1238,19 +1541,23 @@ deviceId();
 if(!localStorage.getItem(K.start)){rawWrite(K.start,C.weekStart(today()));
 }
 active=read(K.active,null);
-if(active){if(active.runningSince!==null){active.ms+=Math.max(0,(active.lastSeen||active.runningSince)-active.runningSince);
-active.runningSince=null;
-}
+if(active){
+// The timestamp remains the source of truth through screen lock, tab suspension,
+// browser discard and reload. Only the student pauses or finishes the timer.
 chosenClass={name:active.className,subject:active.subject};
 chosenStage=active.stage;
 visitId=active.visitId;
+if(active.runningSince!==null&&!active.awayAt){const seen=Math.max(active.runningSince,Number(active.lastSeen)||Date.now());active.awayAt=seen;active.awayElapsed=Math.min(CAP_MS,Math.max(0,Number(active.ms)||0)+(seen-active.runningSince));
+}
+checkReturn();
 saveActive();
-message("Restored your unfinished stage, paused at the last saved checkpoint.");
+message(active.awayPrompt?"You were away from a running timer. Choose how much of that time to count.":active.runningSince!==null?"Your timer kept counting. Pause or finish when you stop studying.":"Restored your unfinished stage. It is still paused.");
 }
 render();
 sessions().filter(r=>r.id).forEach(queueStage);
 historyList().filter(r=>r.revisionId&&r.recommendation&&r.snapshot).forEach(queueReflection);
 syncQueue();
+scheduleRecovery();recoveryBanner();
 }
 document.addEventListener("click",safe(e=>{const b=e.target.closest("button");
 if(!b)return;
@@ -1323,8 +1630,14 @@ break;
 case"hide-anki":rawWrite(K.ankiHide+today(),"1");
 render();
 break;
+case"away-keep":if(active){active.awayPrompt=null;saveActive();}
+render();
+break;
+case"away-trim":if(active&&active.awayPrompt){active.ms=Math.min(CAP_MS,active.awayPrompt.elapsed);active.runningSince=null;active.awayAt=null;active.awayPrompt=null;saveActive();message("Time counted only until you left. The timer is paused.");}
+render();
+break;
 case"toggle-timer":if(active.runningSince!==null){pause();
-}else{active.runningSince=Date.now();
+}else{active.runningSince=Date.now();active.awayAt=null;
 if(!active.startedAt){active.startedAt=new Date().toISOString();
 }
 saveActive();
@@ -1357,6 +1670,12 @@ case"reflect":openReflection();
 break;
 case"weekly-share":shareWeek();
 break;
+case"protect-storage":protectStorage();
+break;
+case"log-prev":logPage=Math.max(0,logPage-1);renderStudyLog();
+break;
+case"log-next":logPage++;renderStudyLog();
+break;
 case"export":exportBackup();
 break;
 case"import":$("backupInput").click();
@@ -1366,18 +1685,24 @@ break;
 $("syncNow").onclick=()=>{syncQueue(true);
 };
 window.addEventListener("online",()=>syncQueue(true));
-document.addEventListener("visibilitychange",safe(()=>{if(document.visibilityState==="hidden"){if(active){saveActive();
-}
+document.addEventListener("visibilitychange",safe(()=>{if(document.visibilityState==="hidden"){if(active){markAway();saveActive();
+}checkpointSafety(true);
 }else{reminderDismissed=false;
+if(active){checkReturn();renderTimer();saveActive();}
 if(screen==="home"){render();
 }
 syncQueue();
 }
 }));
-window.addEventListener("pagehide",safe(()=>{if(active){saveActive();
-}
+window.addEventListener("pagehide",safe(()=>{if(active){markAway();saveActive();}
+checkpointSafety(true);
 }));
-setInterval(safe(()=>{if(active){if($("clock")){$("clock").textContent=time(elapsed()/1000);
+document.addEventListener("freeze",safe(()=>{if(active){markAway();saveActive();}checkpointSafety(true);}));
+document.addEventListener("resume",safe(()=>{if(active){checkReturn();renderTimer();saveActive();}syncQueue();}));
+window.addEventListener("pageshow",safe(()=>{if(active){checkReturn();renderTimer();saveActive();}}));
+setInterval(safe(()=>{if(active){if(active.runningSince!==null&&!active.awayPrompt&&rawElapsed()>=CAP_MS){pause();message("This stage reached the 3-hour limit and was paused. Finish it to save it.");renderTimer();
+}
+if($("clock")){$("clock").textContent=time(elapsed()/1000);
 }
 if(Date.now()-lastCheckpoint>5000){saveActive();
 lastCheckpoint=Date.now();
@@ -1390,11 +1715,12 @@ if(!active&&!dialog.open){render();
 }
 }),1000);
 setInterval(()=>syncQueue(),15000);
-window.addEventListener("storage",safe(e=>{if([K.classes,K.sessions,K.reflections].includes(e.key)&&!active&&!dialog.open){render();
+window.addEventListener("storage",safe(e=>{if(e.key===K.active){active=read(K.active,null);
+if(active){chosenClass={name:active.className,subject:active.subject};chosenStage=active.stage;visitId=active.visitId;screen="timer";}else{screen="home";}
+render();return;
+}
+if([K.classes,K.sessions,K.reflections].includes(e.key)&&!active&&!dialog.open){render();
 }
 }));
-try{init();
-}catch(err){root.innerHTML='<section class="card">'+"<h2>Your saved data needs attention</h2><p>"+esc(err.message)+"</p>"+'<button class="primary" data-action="export">'+"Export a recovery backup</button></section>";
-message("Nothing has been erased.");
-}
+bootApp();
 })();
