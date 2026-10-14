@@ -5,6 +5,7 @@
     classes: "studySystem.classes.v4",
     sessions: "studySystem.sessions.v4",
     device: "studySystem.deviceId.v4",
+    recovery: "studySystem.recoveryCode.v1",
     submissions: "studySystem.weeklySubmissions.v4",
     ankiDone: "studySystem.ankiDone.v4.",
     ankiHide: "studySystem.ankiDismiss.v4.",
@@ -16,7 +17,7 @@
     sync: "studySystem.syncReceipts.v1"
   };
 
-  const RULE_VERSION = "stable-recovery-20261013-6";
+  const VERSION = "student-learning-first-20261013-6digit-recovery-2";
 
   const catalog = {
     "Math": [
@@ -134,7 +135,7 @@
         "See what you can teach or produce from memory.",
 
       instruction:
-        "Put your materials away. First show yourself what you actually know from memory.",
+        "Put your materials away. Do not check your notes yet. First show yourself what you actually know.",
 
       methods: [
         "Teach",
@@ -176,14 +177,14 @@
   const esc = value =>
     String(value ?? "").replace(
       /[&<>"']/g,
-      c =>
-        ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;"
-        })[c]
+
+      c => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[c]
     );
 
   const uid = () =>
@@ -196,25 +197,27 @@
           .toString(36)
           .slice(2);
 
-  const dateKey = (
+  function dateKey(
     date = new Date()
-  ) => [
-    date.getFullYear(),
+  ) {
+    return [
+      date.getFullYear(),
 
-    String(
-      date.getMonth() + 1
-    ).padStart(
-      2,
-      "0"
-    ),
+      String(
+        date.getMonth() + 1
+      ).padStart(
+        2,
+        "0"
+      ),
 
-    String(
-      date.getDate()
-    ).padStart(
-      2,
-      "0"
-    )
-  ].join("-");
+      String(
+        date.getDate()
+      ).padStart(
+        2,
+        "0"
+      )
+    ].join("-");
+  }
 
   const today = () =>
     dateKey();
@@ -279,6 +282,7 @@
 
     return addDays(
       key,
+
       -(
         (
           day +
@@ -319,31 +323,13 @@
       );
   }
 
-  function daysBetween(
-    a,
-    b
-  ) {
-    return Math.round(
-      (
-        new Date(
-          b +
-          "T12:00:00Z"
-        ) -
-        new Date(
-          a +
-          "T12:00:00Z"
-        )
-      ) /
-      86400000
-    );
-  }
-
   function pretty(key) {
     return new Date(
       key +
       "T12:00:00"
     ).toLocaleDateString(
       undefined,
+
       {
         month: "short",
         day: "numeric",
@@ -365,6 +351,52 @@
     );
   }
 
+  function daysBetween(
+    a,
+    b
+  ) {
+    return Math.round(
+      (
+        new Date(
+          b +
+          "T12:00:00Z"
+        ) -
+        new Date(
+          a +
+          "T12:00:00Z"
+        )
+      ) /
+      86400000
+    );
+  }
+
+  function n(value) {
+    const x =
+      Number(value);
+
+    return (
+      Number.isFinite(x) &&
+      x >= 0
+    )
+      ? x
+      : 0;
+  }
+
+  function rate(value) {
+    const x =
+      Number(value);
+
+    return [
+      1,
+      2,
+      3,
+      4,
+      5
+    ].includes(x)
+      ? x
+      : null;
+  }
+
   function stageName(stage) {
     return (
       stages[
@@ -374,81 +406,56 @@
     );
   }
 
-  function number(value) {
-    const n =
-      Number(value);
-
-    return (
-      Number.isFinite(n) &&
-      n >= 0
-    )
-      ? n
-      : 0;
-  }
-
-  function pct(
-    n,
-    d
-  ) {
-    return d
-      ? Math.round(
-          n /
-          d *
-          100
-        ) +
-        "%"
-      : "—";
-  }
-
   function human(seconds) {
-    const sec =
-      number(seconds);
+    const s =
+      n(seconds);
 
     if (
-      sec > 0 &&
-      sec < 60
+      s > 0 &&
+      s < 60
     ) {
       return (
-        Math.round(sec) +
+        Math.round(s) +
         " sec"
       );
     }
 
-    const min =
+    const m =
       Math.round(
-        sec /
+        s /
         60
       );
 
     if (
-      min < 60
+      m < 60
     ) {
       return (
-        min +
+        m +
         " min"
       );
     }
 
     return (
       Math.floor(
-        min /
+        m /
         60
       ) +
       " hr" +
       (
-        min % 60
+        m % 60
           ? " " +
-            min % 60 +
+            m % 60 +
             " min"
           : ""
       )
     );
   }
 
-  function clock(seconds) {
-    const sec =
+  function timerText(seconds) {
+    const s =
       Math.max(
         0,
+
         Math.floor(
           seconds ||
           0
@@ -458,7 +465,7 @@
     return (
       String(
         Math.floor(
-          sec /
+          s /
           60
         )
       ).padStart(
@@ -467,13 +474,27 @@
       ) +
       ":" +
       String(
-        sec %
+        s %
         60
       ).padStart(
         2,
         "0"
       )
     );
+  }
+
+  function pct(
+    value,
+    total
+  ) {
+    return total
+      ? Math.round(
+          value /
+          total *
+          100
+        ) +
+        "%"
+      : "—";
   }
 
   function localDay(row) {
@@ -519,9 +540,12 @@
           key
         );
 
-      return raw === null
+      return raw ===
+        null
         ? fallback
-        : JSON.parse(raw);
+        : JSON.parse(
+            raw
+          );
 
     } catch (error) {
       throw new Error(
@@ -537,6 +561,7 @@
     try {
       localStorage.setItem(
         key,
+
         JSON.stringify(
           value
         )
@@ -544,7 +569,7 @@
 
     } catch (error) {
       throw new Error(
-        "This browser could not save data. Free device space or export a backup; do not clear this site's storage."
+        "This browser could not save data. Export a backup before continuing."
       );
     }
   }
@@ -567,16 +592,9 @@
   }
 
   function remove(key) {
-    try {
-      localStorage.removeItem(
-        key
-      );
-
-    } catch (error) {
-      throw new Error(
-        "This browser could not update saved data."
-      );
-    }
+    localStorage.removeItem(
+      key
+    );
   }
 
   function classes() {
@@ -665,27 +683,17 @@
     return value;
   }
 
-  /*
-    --------------------------------------------------
-    STABLE RECOVERY ID
-    --------------------------------------------------
-
-    IMPORTANT:
-    Keep using studySystem.deviceId.v4.
-
-    Existing students keep the ID that is already
-    stored in their browser.
-
-    A new ID is created only when there truly is no
-    saved ID in this browser.
-  */
+  // ================================================
+  // INTERNAL ID + SIMPLE 6-DIGIT RECOVERY CODE
+  // ================================================
 
   let stableDeviceId =
     null;
 
-  function cleanDeviceId(
-    value
-  ) {
+  let stableRecoveryCode =
+    null;
+
+  function cleanDeviceId(value) {
     const id =
       String(
         value ||
@@ -704,27 +712,13 @@
   }
 
   function deviceId() {
-    let stored = "";
-
-    try {
-      stored =
-        cleanDeviceId(
-          localStorage.getItem(
-            K.device
-          )
-        );
-
-    } catch (error) {
-      throw new Error(
-        "This browser could not read your anonymous recovery ID. Do not clear website data."
+    const stored =
+      cleanDeviceId(
+        localStorage.getItem(
+          K.device
+        )
       );
-    }
 
-    /*
-      If this page already established an identity,
-      never silently switch identities during the
-      same page session.
-    */
     if (
       stableDeviceId
     ) {
@@ -734,15 +728,10 @@
         stableDeviceId
       ) {
         throw new Error(
-          "Your anonymous recovery ID changed unexpectedly. Nothing was erased. Export a backup before continuing."
+          "The app's internal identity changed unexpectedly. Export a backup before continuing."
         );
       }
 
-      /*
-        If only the device ID key disappeared while
-        this page is still running, restore the
-        already-known ID instead of creating another.
-      */
       if (!stored) {
         rawWrite(
           K.device,
@@ -753,10 +742,6 @@
       return stableDeviceId;
     }
 
-    /*
-      Existing student:
-      use the saved ID.
-    */
     if (stored) {
       stableDeviceId =
         stored;
@@ -764,10 +749,6 @@
       return stableDeviceId;
     }
 
-    /*
-      Truly new browser/site storage:
-      create one ID.
-    */
     const created =
       uid();
 
@@ -776,22 +757,16 @@
       created
     );
 
-    /*
-      Confirm that the browser actually saved it.
-    */
-    const verified =
+    if (
       cleanDeviceId(
         localStorage.getItem(
           K.device
         )
-      );
-
-    if (
-      verified !==
+      ) !==
       created
     ) {
       throw new Error(
-        "This browser did not preserve your recovery ID. Do not continue until browser storage is working."
+        "This browser did not preserve the app's internal identity."
       );
     }
 
@@ -801,9 +776,128 @@
     return stableDeviceId;
   }
 
+  function cleanRecoveryCode(value) {
+    const code =
+      String(
+        value ||
+        ""
+      ).trim();
+
+    return /^\d{6}$/.test(
+      code
+    )
+      ? code
+      : "";
+  }
+
+  function makeRecoveryCode() {
+    let value;
+
+    if (
+      window.crypto &&
+      typeof crypto.getRandomValues ===
+      "function"
+    ) {
+      const a =
+        new Uint32Array(1);
+
+      crypto.getRandomValues(
+        a
+      );
+
+      value =
+        a[0] %
+        1000000;
+
+    } else {
+      value =
+        Math.floor(
+          Math.random() *
+          1000000
+        );
+    }
+
+    return String(
+      value
+    ).padStart(
+      6,
+      "0"
+    );
+  }
+
+  function recoveryCode() {
+    const stored =
+      cleanRecoveryCode(
+        localStorage.getItem(
+          K.recovery
+        )
+      );
+
+    if (
+      stableRecoveryCode
+    ) {
+      if (
+        stored &&
+        stored !==
+        stableRecoveryCode
+      ) {
+        throw new Error(
+          "Your recovery code changed unexpectedly. Export a backup before continuing."
+        );
+      }
+
+      if (!stored) {
+        rawWrite(
+          K.recovery,
+          stableRecoveryCode
+        );
+      }
+
+      return stableRecoveryCode;
+    }
+
+    if (stored) {
+      stableRecoveryCode =
+        stored;
+
+      return stableRecoveryCode;
+    }
+
+    const created =
+      makeRecoveryCode();
+
+    rawWrite(
+      K.recovery,
+      created
+    );
+
+    if (
+      cleanRecoveryCode(
+        localStorage.getItem(
+          K.recovery
+        )
+      ) !==
+      created
+    ) {
+      throw new Error(
+        "This browser did not preserve your recovery code."
+      );
+    }
+
+    stableRecoveryCode =
+      created;
+
+    return stableRecoveryCode;
+  }
+
+  // ================================================
+  // STUDY SUMMARY + COACHING
+  // ================================================
+
   function summarize(rows) {
     const result = {
       count: 0,
+      positive: 0,
       seconds: 0,
       studySeconds: 0,
       crossSeconds: 0,
@@ -833,155 +927,169 @@
       }
     };
 
-    const daySet =
+    const days =
       new Set();
 
-    rows.forEach(row => {
-      const stage =
-        Number(
-          row.stage
-        );
+    rows.forEach(
+      row => {
+        const stage =
+          Number(
+            row.stage
+          );
 
-      if (
-        ![
-          1,
-          2,
-          3
-        ].includes(
-          stage
-        )
-      ) {
-        return;
-      }
+        if (
+          ![
+            1,
+            2,
+            3
+          ].includes(
+            stage
+          )
+        ) {
+          return;
+        }
 
-      const study =
-        number(
-          row.studySeconds
-        );
+        const study =
+          n(
+            row.studySeconds
+          );
 
-      const cross =
-        number(
-          row.crosscheckSeconds
-        );
+        const cross =
+          n(
+            row.crosscheckSeconds
+          );
 
-      const method =
-        String(
-          row.method ||
-          "Unspecified"
-        );
+        const method =
+          String(
+            row.method ||
+            "Unspecified"
+          );
 
-      const className =
-        String(
-          row.className ||
-          "Unnamed class"
-        );
+        const className =
+          String(
+            row.className ||
+            "Unnamed class"
+          );
 
-      result.count++;
+        result.count++;
 
-      result.studySeconds +=
-        study;
+        if (
+          study > 0
+        ) {
+          result.positive++;
+        }
 
-      result.crossSeconds +=
-        cross;
+        result.studySeconds +=
+          study;
 
-      result.seconds +=
-        study +
-        cross;
+        result.crossSeconds +=
+          cross;
 
-      result
-        .stages[
-          stage
-        ]
-        .count++;
+        result.seconds +=
+          study +
+          cross;
 
-      result
-        .stages[
-          stage
-        ]
-        .seconds +=
-        study;
-
-      if (
-        !result
+        result
           .stages[
             stage
           ]
-          .methods[
-            method
+          .count++;
+
+        result
+          .stages[
+            stage
           ]
-      ) {
+          .seconds +=
+          study;
+
+        if (
+          !result
+            .stages[
+              stage
+            ]
+            .methods[
+              method
+            ]
+        ) {
+          result
+            .stages[
+              stage
+            ]
+            .methods[
+              method
+            ] = {
+              count: 0,
+              seconds: 0
+            };
+        }
+
         result
           .stages[
             stage
           ]
           .methods[
             method
-          ] = {
-            count: 0,
-            seconds: 0
-          };
-      }
+          ]
+          .count++;
 
-      result
-        .stages[
-          stage
-        ]
-        .methods[
-          method
-        ]
-        .count++;
-
-      result
-        .stages[
-          stage
-        ]
-        .methods[
-          method
-        ]
-        .seconds +=
-        study;
-
-      result.methods[
-        method
-      ] =
-        (
-          result.methods[
+        result
+          .stages[
+            stage
+          ]
+          .methods[
             method
-          ] ||
-          0
-        ) +
-        1;
+          ]
+          .seconds +=
+          study;
 
-      result.classes[
-        className
-      ] =
-        (
-          result.classes[
-            className
-          ] ||
-          0
-        ) +
-        study +
-        cross;
+        result.methods[
+          method
+        ] =
+          (
+            result.methods[
+              method
+            ] ||
+            0
+          ) +
+          1;
 
-      if (
-        stage === 2 &&
-        cross > 0
-      ) {
-        result.crossCount++;
+        result.classes[
+          className
+        ] =
+          (
+            result.classes[
+              className
+            ] ||
+            0
+          ) +
+          study +
+          cross;
+
+        if (
+          stage ===
+            2 &&
+          cross >
+            0
+        ) {
+          result.crossCount++;
+        }
+
+        const day =
+          localDay(
+            row
+          );
+
+        if (day) {
+          days.add(
+            day
+          );
+        }
       }
-
-      const day =
-        localDay(row);
-
-      if (day) {
-        daySet.add(day);
-      }
-    });
+    );
 
     result.days =
       [
-        ...daySet
+        ...days
       ];
 
     return result;
@@ -998,13 +1106,22 @@
       );
 
     return sessions()
-      .filter(row =>
-        row.className ===
-          className &&
-        localDay(row) >=
-          week &&
-        localDay(row) <
-          end
+      .filter(
+        row => {
+          const day =
+            localDay(
+              row
+            );
+
+          return (
+            row.className ===
+              className &&
+            day >=
+              week &&
+            day <
+              end
+          );
+        }
       );
   }
 
@@ -1015,11 +1132,12 @@
     return Object.values(
       reflections()
     )
-      .filter(r =>
-        r.className ===
-          className &&
-        r.weekStart <
-          beforeWeek
+      .filter(
+        r =>
+          r.className ===
+            className &&
+          r.weekStart <
+            beforeWeek
       )
       .sort(
         (
@@ -1041,7 +1159,7 @@
       null;
   }
 
-  function recommendation(
+  function recommend(
     summary,
     outcome = null,
     previous = null
@@ -1049,342 +1167,247 @@
     const learn =
       summary.stages[1];
 
-    const retrieve =
+    const retrieval =
       summary.stages[2];
 
     const assess =
       summary.stages[3];
 
-    const learningRating =
+    const learning =
       outcome
-        ? Number(
+        ? rate(
             outcome.learningRating
           )
         : null;
 
-    const assessmentRating =
+    const assessment =
       outcome &&
       outcome.hadAssessment
-        ? Number(
+        ? rate(
             outcome.assessmentRating
           )
         : null;
 
-    const prevLearning =
+    const oldLearning =
       previous
-        ? Number(
+        ? rate(
             previous.learningRating
           )
         : null;
 
-    const prevAssessment =
+    const oldAssessment =
       previous &&
       previous.hadAssessment
-        ? Number(
+        ? rate(
             previous.assessmentRating
           )
         : null;
 
-    const base = {
-      version:
-        RULE_VERSION,
+    const make = (
+      code,
+      title,
+      text,
+      targetStage = 2,
+      targetMethod = "Teach"
+    ) => ({
+      code,
+      title,
+      text,
+      action: text,
+      targetStage,
+      targetMethod,
+      version: VERSION,
+      caution:
+        "Based on your ratings and recorded activity."
+    });
 
-      targetStage:
-        2,
-
-      targetMethod:
-        "Teach"
-    };
-
-    /*
-      Repeated low learning rating:
-      give a useful change even if an older suggestion
-      cannot be proven from the timer log.
-    */
     if (
-      previous &&
-      learningRating <= 2 &&
-      prevLearning <= 2
+      learning !== null &&
+      oldLearning !== null &&
+      learning <= 2 &&
+      oldLearning <= 2
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "CHANGE_ONE_THING_LEARNING",
+      return make(
+        "CHANGE_ONE_THING_LEARNING",
 
-          title:
-            "Change one part of the next study visit",
+        "Change one part of the next visit",
 
-          text:
-            "Learning has felt difficult in two rated weeks. Pick one confusing example, work through it, then close your notes and explain the corrected idea from memory. Crosscheck the gap.",
+        "Learning has felt difficult in two rated weeks. Pick one confusing example, work through it, close your notes, explain the corrected idea from memory, and Crosscheck the gap.",
 
-          targetStage:
-            1,
+        1,
 
-          targetMethod:
-            "Worked Examples"
-        }
+        "Worked Examples"
       );
     }
 
-    /*
-      Repeated low assessment rating:
-      separate assessment evidence from learning rating.
-    */
     if (
-      previous &&
-      assessmentRating !==
-        null &&
-      prevAssessment !==
-        null &&
-      assessmentRating <=
-        2 &&
-      prevAssessment <=
-        2
+      assessment !== null &&
+      oldAssessment !== null &&
+      assessment <= 2 &&
+      oldAssessment <= 2
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "CHANGE_ONE_THING_ASSESSMENT",
+      return make(
+        "CHANGE_ONE_THING_ASSESSMENT",
 
-          title:
-            "Change the kind of practice",
+        "Change the kind of practice",
 
-          text:
-            "Assessment has felt difficult in two rated weeks. Keep Retrieval and Crosscheck, then use a Practice Test or Practice Problems that resemble the assessment.",
+        "Assessment has felt difficult in two rated weeks. Keep Retrieval and Crosscheck, then use a Practice Test or Practice Problems that resemble the assessment.",
 
-          targetStage:
-            3,
+        3,
 
-          targetMethod:
-            "Practice Test"
-        }
+        "Practice Test"
       );
     }
 
-    /*
-      Strong outcome:
-      do not force artificial stage balancing.
-    */
     if (
-      outcome &&
-      learningRating >=
-        4 &&
+      learning !== null &&
+      learning >= 4 &&
       (
-        assessmentRating ===
-          null ||
-        assessmentRating >=
-          4
+        assessment === null ||
+        assessment >= 4
       )
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "KEEP_WORKING_APPROACH",
+      return make(
+        "KEEP_WORKING_APPROACH",
 
-          title:
-            "Keep the useful parts",
+        "Keep the useful parts",
 
-          text:
-            assessmentRating ===
-              null
-              ? "Your learning rating is strong. Keep the methods that are helping; assessment results can be reviewed when you have one."
-              : "Your learning and assessment ratings are strong. Keep the methods that are helping. You do not need to make the stage percentages even."
-        }
+        assessment === null
+          ? "Your learning rating is strong. Keep the methods that are helping; assessment results can be reviewed when you have one."
+          : "Your learning and assessment ratings are strong. Keep the methods that are helping. You do not need to make the stage percentages even."
       );
     }
 
-    /*
-      Learn or Assess activity but no Retrieval.
-    */
     if (
-      summary.count >
-        0 &&
-      retrieve.count ===
-        0
+      summary.count > 0 &&
+      retrieval.count === 0
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "ADD_RETRIEVAL",
+      return make(
+        "ADD_RETRIEVAL",
 
-          title:
-            "Add a memory check",
+        "Add a memory check",
 
-          text:
-            "You logged studying but no separate Retrieval. Close your materials and teach or reconstruct the idea from memory before deciding what needs review."
-        }
+        "You logged studying but no separate Retrieval. Close your materials and teach or reconstruct the idea from memory before deciding what needs review."
       );
     }
 
-    /*
-      Retrieval is happening but Crosscheck is often missing.
-    */
     if (
-      retrieve.count >=
-        2 &&
+      retrieval.count >= 2 &&
+      retrieval.count > 0 &&
       summary.crossCount /
-        retrieve.count <
-        0.8
+      retrieval.count <
+      0.8
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "ADD_CROSSCHECK",
+      return make(
+        "ADD_CROSSCHECK",
 
-          title:
-            "Crosscheck what you retrieved",
+        "Crosscheck what you retrieved",
 
-          text:
-            "Some Retrieval stages do not show Crosscheck time. After retrieving, compare what you produced with a reliable source and correct the specific gap."
-        }
+        "Some Retrieval stages do not show Crosscheck time. After retrieving, compare what you produced with a reliable source and correct the specific gap."
       );
     }
 
-    /*
-      Retrieval exists, Assess does not.
-    */
     if (
-      retrieve.count >
-        0 &&
-      assess.count ===
-        0
+      learning !== null &&
+      learning >= 4 &&
+      assessment !== null &&
+      assessment <= 2
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "ADD_ASSESS",
+      return make(
+        "MATCH_ASSESSMENT",
 
-          title:
-            "Try a short independent check",
+        "Match your practice to the assessment",
 
-          text:
-            "After Retrieval and Crosscheck, try a short Practice Test, Practice Problems, or Anki assessment without help.",
+        "Learning feels clear, but the assessment rating is low. Keep Retrieval and Crosscheck, then use Practice Problems or a Practice Test that resembles the questions you found difficult.",
 
-          targetStage:
-            3,
+        3,
 
-          targetMethod:
-            "Practice Test"
-        }
+        "Practice Test"
       );
     }
 
-    /*
-      Low assessment rating and most assessment practice
-      is Anki.
-    */
     const anki =
       assess.methods.Anki;
 
     if (
-      assessmentRating !==
-        null &&
-      assessmentRating <=
-        2 &&
-      assess.count >=
-        3 &&
+      assessment !== null &&
+      assessment <= 2 &&
+      assess.count >= 3 &&
       anki &&
       anki.count /
-        assess.count >=
-        0.65
+      assess.count >=
+      0.65
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "MATCH_ASSESSMENT",
+      return make(
+        "ADD_TEST_LIKE_PRACTICE",
 
-          title:
-            "Add practice that matches the assessment",
+        "Add practice beyond Anki",
 
-          text:
-            "Keep Anki for recall, but add Practice Problems or a Practice Test that matches the kind of questions you found difficult.",
+        "Keep Anki for recall, but add Practice Problems or a Practice Test that matches the kind of questions you found difficult.",
 
-          targetStage:
-            3,
+        3,
 
-          targetMethod:
-            "Practice Test"
-        }
+        "Practice Test"
       );
     }
 
-    /*
-      Difficulty + lots of Learn:
-      focus on one gap rather than more general review.
-    */
     if (
-      outcome &&
-      learningRating <=
-        2 &&
-      summary.studySeconds >
-        0 &&
+      retrieval.count > 0 &&
+      assess.count === 0
+    ) {
+      return make(
+        "ADD_ASSESS",
+
+        "Try a short independent check",
+
+        "After Retrieval and Crosscheck, try a short Practice Test, Practice Problems, or Anki assessment without help.",
+
+        3,
+
+        "Practice Test"
+      );
+    }
+
+    if (
+      learning !== null &&
+      learning <= 2 &&
+      summary.studySeconds > 0 &&
       learn.seconds /
-        summary.studySeconds >=
-        0.5
+      summary.studySeconds >=
+      0.5
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "TARGETED_RELEARN",
+      return make(
+        "TARGETED_RELEARN",
 
-          title:
-            "Relearn one gap, not everything",
+        "Relearn one gap, not everything",
 
-          text:
-            "Choose one difficult Worked Example, work through it, then close your notes and explain the idea from memory. Crosscheck only what you missed.",
+        "Choose one difficult Worked Example, work through it, then close your notes and explain the idea from memory. Crosscheck only what you missed.",
 
-          targetStage:
-            1,
+        1,
 
-          targetMethod:
-            "Worked Examples"
-        }
+        "Worked Examples"
       );
     }
 
-    /*
-      3/5 is a middle response, not automatic failure.
-    */
     if (
-      outcome &&
-      learningRating ===
-        3
+      learning ===
+      3
     ) {
-      return Object.assign(
-        base,
-        {
-          code:
-            "KEEP_TESTING",
+      return make(
+        "KEEP_TESTING",
 
-          title:
-            "Keep testing your approach",
+        "Keep testing your approach",
 
-          text:
-            "A 3/5 is a middle response, not a failure. Keep the useful parts and use one short Retrieval plus Crosscheck to identify what still needs work."
-        }
+        "A 3/5 is a middle response, not a failure. Keep the useful parts and use one short Retrieval plus Crosscheck to identify what still needs work."
       );
     }
 
-    return Object.assign(
-      base,
-      {
-        code:
-          "TRY_CYCLE",
+    return make(
+      "TRY_CYCLE",
 
-        title:
-          "Choose one useful next step",
+      "Choose one useful next step",
 
-        text:
-          "Retrieve what you know first, Crosscheck what you missed, then choose a brief independent Assess activity."
-      }
+      "Retrieve what you know first, Crosscheck what you missed, then choose a brief independent Assess activity."
     );
   }
 
@@ -1397,7 +1420,7 @@
         today()
       );
 
-    const current =
+    const saved =
       reflections();
 
     const groups =
@@ -1406,14 +1429,18 @@
     sessions().forEach(
       row => {
         const day =
-          localDay(row);
+          localDay(
+            row
+          );
 
         if (!day) {
           return;
         }
 
         const week =
-          weekStart(day);
+          weekStart(
+            day
+          );
 
         const className =
           String(
@@ -1440,35 +1467,24 @@
             className
           );
 
-        const saved =
-          current[key];
+        const r =
+          saved[key];
 
         if (
-          saved &&
-          [
-            1,
-            2,
-            3,
-            4,
-            5
-          ].includes(
-            Number(
-              saved.learningRating
-            )
-          ) &&
+          r &&
+          rate(
+            r.learningRating
+          ) !== null &&
           (
-            saved.hadAssessment ===
+            r.hadAssessment ===
               false ||
-            [
-              1,
-              2,
-              3,
-              4,
-              5
-            ].includes(
-              Number(
-                saved.assessmentRating
-              )
+            (
+              r.hadAssessment ===
+                true &&
+              rate(
+                r.assessmentRating
+              ) !==
+                null
             )
           )
         ) {
@@ -1477,6 +1493,7 @@
 
         groups.set(
           key,
+
           {
             className,
             weekStart:
@@ -1549,9 +1566,7 @@
     ];
   }
 
-  function saveReflection(
-    record
-  ) {
+  function saveReflection(record) {
     const latest =
       reflections();
 
@@ -1584,8 +1599,7 @@
 
   function latestReflection(
     className,
-    through =
-      "9999-12-31"
+    through = "9999-12-31"
   ) {
     return Object.values(
       reflections()
@@ -1617,37 +1631,9 @@
       null;
   }
 
-  function message(text) {
-    const el =
-      $("message");
-
-    if (el) {
-      el.textContent =
-        text ||
-        "";
-    }
-  }
-
-  function safe(fn) {
-    return (
-      ...args
-    ) => {
-      try {
-        return fn(
-          ...args
-        );
-
-      } catch (error) {
-        console.error(
-          error
-        );
-
-        message(
-          error.message
-        );
-      }
-    };
-  }
+  // ================================================
+  // UI STATE
+  // ================================================
 
   let screen =
     "home";
@@ -1696,6 +1682,38 @@
   let lastError =
     "";
 
+  function message(text) {
+    const el =
+      $("message");
+
+    if (el) {
+      el.textContent =
+        text ||
+        "";
+    }
+  }
+
+  function safe(fn) {
+    return (
+      ...args
+    ) => {
+      try {
+        return fn(
+          ...args
+        );
+
+      } catch (error) {
+        console.error(
+          error
+        );
+
+        message(
+          error.message
+        );
+      }
+    };
+  }
+
   function ankiDue() {
     const monday =
       weekStart(
@@ -1707,6 +1725,7 @@
 
     [
       monday,
+
       addDays(
         monday,
         3
@@ -1732,9 +1751,7 @@
     return due;
   }
 
-  function lastChecked(
-    className
-  ) {
+  function lastChecked(className) {
     const checks =
       sessions()
         .filter(
@@ -1782,6 +1799,7 @@
         localDay(
           checks[0]
         ),
+
         today()
       );
 
@@ -1879,6 +1897,7 @@
     $("navigation").innerHTML =
       active
         ? '<span class="small">Session in progress</span>'
+
         : '<button class="text-button" data-nav="home">Study</button>' +
           '<button class="text-button" data-nav="progress">Progress</button>' +
           '<button class="text-button" data-nav="backup">Backup</button>';
@@ -1950,16 +1969,22 @@
 
     let html =
       '<section class="card intro">' +
+
       '<span class="eyebrow">YOUR NEXT STUDY VISIT</span>' +
+
       '<h2>Pick a class. Make one useful next move.</h2>' +
+
       '<p class="muted">Start at any stage. A second stage is optional.</p>' +
+
       '</section>';
 
     if (
       due.length
     ) {
       html +=
-        '<section class="notice"><strong>' +
+        '<section class="notice">' +
+
+        '<strong>' +
 
         due.length +
 
@@ -1972,11 +1997,21 @@
             : "s are"
         ) +
 
-        ' waiting</strong><p class="small">' +
+        ' waiting</strong>' +
+
+        '<p class="small">' +
 
         'Your learning rating can guide feedback even when there was no assessment.' +
 
-        '</p><button class="primary" data-action="reflect">Answer check-in</button></section>';
+        '</p>' +
+
+        '<button class="primary" data-action="reflect">' +
+
+        'Answer check-in' +
+
+        '</button>' +
+
+        '</section>';
     }
 
     if (
@@ -1990,7 +2025,9 @@
       html +=
         '<section class="notice">' +
 
-        '<strong>Anki — Stage 3 Assess</strong><p>' +
+        '<strong>Anki — Stage 3 Assess</strong>' +
+
+        '<p>' +
 
         (
           dueAnki[0] ===
@@ -2003,13 +2040,25 @@
               " is due this week."
         ) +
 
-        '</p><div class="actions">' +
+        '</p>' +
 
-        '<button class="primary" data-action="anki">Choose a class for Anki</button>' +
+        '<div class="actions">' +
 
-        '<button class="secondary" data-action="hide-anki">Hide for today</button>' +
+        '<button class="primary" data-action="anki">' +
 
-        '</div></section>';
+        'Choose a class for Anki' +
+
+        '</button>' +
+
+        '<button class="secondary" data-action="hide-anki">' +
+
+        'Hide for today' +
+
+        '</button>' +
+
+        '</div>' +
+
+        '</section>';
     }
 
     html +=
@@ -2019,7 +2068,11 @@
 
       '<h2>Your classes</h2>' +
 
-      '<button class="secondary" data-nav="classes">Edit classes</button>' +
+      '<button class="secondary" data-nav="classes">' +
+
+      'Edit classes' +
+
+      '</button>' +
 
       '</div>' +
 
@@ -2053,7 +2106,9 @@
         )
         .join("") +
 
-      '</div></section>';
+      '</div>' +
+
+      '</section>';
 
     root.innerHTML =
       html;
@@ -2109,7 +2164,11 @@
 
       '<div class="actions">' +
 
-      '<button class="primary" data-action="add-class">Add class</button>' +
+      '<button class="primary" data-action="add-class">' +
+
+      'Add class' +
+
+      '</button>' +
 
       '</div>' +
 
@@ -2145,7 +2204,11 @@
 
             '<button class="secondary" data-remove="' +
             i +
-            '">Remove</button>' +
+            '">' +
+
+            'Remove' +
+
+            '</button>' +
 
             '</div>'
         )
@@ -2155,7 +2218,11 @@
         saved.length
           ? '<div class="actions">' +
 
-            '<button class="primary" data-nav="home">Done adding classes</button>' +
+            '<button class="primary" data-nav="home">' +
+
+            'Done adding classes' +
+
+            '</button>' +
 
             '</div>'
 
@@ -2286,7 +2353,7 @@
 
     const advice =
       recent?.recommendation ||
-      recommendation(
+      recommend(
         sum
       );
 
@@ -2307,7 +2374,11 @@
 
       '</div>' +
 
-      '<button class="secondary" data-nav="home">Change class</button>' +
+      '<button class="secondary" data-nav="home">' +
+
+      'Change class' +
+
+      '</button>' +
 
       '</div>' +
 
@@ -2337,7 +2408,11 @@
             : ''
       ) +
 
-      '<p class="muted">Choose any stage. The suggestions are options, not a required sequence.</p>' +
+      '<p class="muted">' +
+
+      'Choose any stage. The suggestions are options, not a required sequence.' +
+
+      '</p>' +
 
       '<div class="grid">' +
 
@@ -2347,30 +2422,34 @@
         3
       ]
         .map(
-          n =>
+          stage =>
             '<button class="stage-button ' +
 
             (
               chosenStage ===
-                n
+                stage
                 ? "selected"
                 : ""
             ) +
 
             '" data-stage="' +
-            n +
+            stage +
             '">' +
 
             '<span>Stage ' +
-            n +
+            stage +
             '</span>' +
 
             '<strong>' +
-            stages[n].name +
+            stages[
+              stage
+            ].name +
             '</strong>' +
 
             '<span>' +
-            stages[n].purpose +
+            stages[
+              stage
+            ].purpose +
             '</span>' +
 
             '</button>'
@@ -2384,9 +2463,11 @@
           ? '<div class="stage-details">' +
 
             '<h3>Choose your ' +
+
             stages[
               chosenStage
             ].name +
+
             ' method</h3>' +
 
             '<div class="methods">' +
@@ -2501,10 +2582,11 @@
 
       (
         crosscheck
-          ? 'Crosscheck'
-          : 'Stage ' +
+          ? "Crosscheck"
+
+          : "Stage " +
             active.stage +
-            ' — ' +
+            " — " +
             stageName(
               active.stage
             )
@@ -2522,7 +2604,8 @@
 
       (
         crosscheck
-          ? 'Compare what you retrieved with notes or another reliable source. Correct the gap before moving on.'
+          ? "Compare what you retrieved with notes or another reliable source. Correct the gap before moving on."
+
           : stages[
               active.stage
             ].instruction
@@ -2532,7 +2615,7 @@
 
       '<div id="clock" class="clock" role="timer">' +
 
-      clock(
+      timerText(
         elapsedMs() /
         1000
       ) +
@@ -2546,16 +2629,16 @@
       (
         active.runningSince !==
           null
-          ? 'Pause'
+          ? "Pause"
 
           : active.ms >
             0
-            ? 'Resume'
+            ? "Resume"
 
             : crosscheck
-              ? 'Start Crosscheck'
+              ? "Start Crosscheck"
 
-              : 'Start'
+              : "Start"
       ) +
 
       '</button>' +
@@ -2567,8 +2650,8 @@
 
             (
               crosscheck
-                ? 'Finish Crosscheck'
-                : 'Finish stage'
+                ? "Finish Crosscheck"
+                : "Finish stage"
             ) +
 
             '</button>'
@@ -2580,23 +2663,27 @@
 
       (
         crosscheck
-          ? 'skip-crosscheck'
-          : 'cancel-timer'
+          ? "skip-crosscheck"
+          : "cancel-timer"
       ) +
 
       '">' +
 
       (
         crosscheck
-          ? 'Skip Crosscheck for now'
-          : 'Cancel stage'
+          ? "Skip Crosscheck for now"
+          : "Cancel stage"
       ) +
 
       '</button>' +
 
       '</div>' +
 
-      '<p class="small">Time is logged automatically. Do not enter names or grades.</p>' +
+      '<p class="small">' +
+
+      'Time is logged automatically. Do not enter names or grades.' +
+
+      '</p>' +
 
       '</section>';
   }
@@ -2649,8 +2736,7 @@
   }
 
   function finishTimer(
-    skipCrosscheck =
-      false
+    skipCrosscheck = false
   ) {
     if (!active) {
       return;
@@ -2808,10 +2894,10 @@
               .toISOString();
 
       record.totalSeconds =
-        number(
+        n(
           record.studySeconds
         ) +
-        number(
+        n(
           record.crosscheckSeconds
         );
 
@@ -2863,22 +2949,29 @@
       '<span class="eyebrow">SAVED ON THIS DEVICE</span>' +
 
       '<h2>Stage ' +
+
       completed.stage +
+
       ' — ' +
+
       stageName(
         completed.stage
       ) +
+
       ' complete</h2>' +
 
       '<p><strong>' +
+
       esc(
         completed.className
       ) +
+
       '</strong> · ' +
 
       esc(
         completed.method
       ) +
+
       ' · ' +
 
       human(
@@ -2888,9 +2981,11 @@
       (
         completed.crosscheckSeconds
           ? ' + ' +
+
             human(
               completed.crosscheckSeconds
             ) +
+
             ' Crosscheck'
 
           : ''
@@ -2909,8 +3004,8 @@
       (
         completed.stage ===
           2
-          ? 'Ready to continue? Try a short independent Practice Test, Practice Problems, or Anki after your Crosscheck.'
-          : 'Continue only if it serves your learning goal. You can also finish now.'
+          ? "Ready to continue? Try a short independent Practice Test, Practice Problems, or Anki after your Crosscheck."
+          : "Continue only if it serves your learning goal. You can also finish now."
       ) +
 
       '</p>' +
@@ -2920,17 +3015,27 @@
       '<div class="actions">' +
 
       '<button class="primary" data-action="next-stage">' +
+
       next +
+
       '</button>' +
 
-      '<button class="secondary" data-action="finish-visit">Finish studying</button>' +
+      '<button class="secondary" data-action="finish-visit">' +
+
+      'Finish studying' +
+
+      '</button>' +
 
       '</div>' +
 
       '</section>';
   }
 
-  function ratingSummary(
+  // ================================================
+  // PROGRESS
+  // ================================================
+
+  function ratingSeries(
     className,
     start,
     end
@@ -2968,91 +3073,104 @@
               )
         );
 
-    const learning =
-      records.map(
-        r =>
-          Number(
-            r.learningRating
-          )
-      );
-
-    const assessment =
-      records
-        .filter(
-          r =>
-            r.hadAssessment
-        )
-        .map(
-          r =>
-            Number(
-              r.assessmentRating
-            )
-        );
-
-    const trend =
-      values => {
-        if (
-          !values.length
-        ) {
-          return "not rated";
-        }
-
-        if (
-          values.length ===
-          1
-        ) {
-          return "one rating";
-        }
-
-        const first =
-          values[0];
-
-        const last =
-          values[
-            values.length -
-            1
-          ];
-
-        if (
-          last >
-          first
-        ) {
-          return "higher than the first rating";
-        }
-
-        if (
-          last <
-          first
-        ) {
-          return "lower than the first rating";
-        }
-
-        return "same as the first rating";
-      };
-
     return {
       records,
-      learning,
-      assessment,
 
-      learningTrend:
-        trend(
-          learning
-        ),
+      learning:
+        records
+          .map(
+            r =>
+              rate(
+                r.learningRating
+              )
+          )
+          .filter(
+            v =>
+              v !== null
+          ),
 
-      assessmentTrend:
-        trend(
-          assessment
-        )
+      assessment:
+        records
+          .filter(
+            r =>
+              r.hadAssessment
+          )
+          .map(
+            r =>
+              rate(
+                r.assessmentRating
+              )
+          )
+          .filter(
+            v =>
+              v !== null
+          )
     };
+  }
+
+  function trendText(values) {
+    if (
+      !values.length
+    ) {
+      return "not rated";
+    }
+
+    if (
+      values.length ===
+      1
+    ) {
+      return "one result; no trend yet";
+    }
+
+    const changes =
+      values
+        .slice(1)
+        .map(
+          (
+            v,
+            i
+          ) =>
+            v -
+            values[i]
+        );
+
+    if (
+      changes.every(
+        x =>
+          x === 0
+      )
+    ) {
+      return "unchanged";
+    }
+
+    if (
+      changes.some(
+        x =>
+          x > 0
+      ) &&
+      changes.some(
+        x =>
+          x < 0
+      )
+    ) {
+      return "mixed";
+    }
+
+    if (
+      changes.some(
+        x =>
+          x < 0
+      )
+    ) {
+      return "rated lower over time";
+    }
+
+    return "rated higher over time";
   }
 
   function renderProgress() {
     const allRows =
       sessions();
-
-    const current =
-      today();
 
     const keys =
       new Set(
@@ -3060,10 +3178,10 @@
           periodKind ===
             "week"
             ? weekStart(
-                current
+                today()
               )
             : monthStart(
-                current
+                today()
               )
         ]
       );
@@ -3071,7 +3189,9 @@
     allRows.forEach(
       row => {
         const day =
-          localDay(row);
+          localDay(
+            row
+          );
 
         if (!day) {
           return;
@@ -3146,7 +3266,9 @@
       allRows.filter(
         row => {
           const day =
-            localDay(row);
+            localDay(
+              row
+            );
 
           return (
             day >=
@@ -3157,21 +3279,21 @@
         }
       );
 
-    const summary =
+    const sum =
       summarize(
         selected
       );
 
     const stageTotal =
-      summary
+      sum
         .stages[1]
         .seconds +
 
-      summary
+      sum
         .stages[2]
         .seconds +
 
-      summary
+      sum
         .stages[3]
         .seconds;
 
@@ -3193,7 +3315,11 @@
           : "secondary"
       ) +
 
-      '" data-period="week">Weekly</button>' +
+      '" data-period="week">' +
+
+      'Weekly' +
+
+      '</button>' +
 
       '<button class="' +
 
@@ -3204,12 +3330,19 @@
           : "secondary"
       ) +
 
-      '" data-period="month">Monthly</button>' +
+      '" data-period="month">' +
+
+      'Monthly' +
+
+      '</button>' +
 
       '</div>' +
 
-      '<label class="field" for="periodSelect">Choose a ' +
+      '<label class="field" for="periodSelect">' +
+
+      'Choose a ' +
       periodKind +
+
       '</label>' +
 
       '<select id="periodSelect">' +
@@ -3222,7 +3355,9 @@
         .map(
           key =>
             '<option value="' +
+
             key +
+
             '" ' +
 
             (
@@ -3249,6 +3384,7 @@
                       "T12:00:00"
                     ).toLocaleDateString(
                       undefined,
+
                       {
                         month:
                           "long",
@@ -3277,9 +3413,11 @@
       '<span>Total time</span>' +
 
       '<strong>' +
+
       human(
-        summary.seconds
+        sum.seconds
       ) +
+
       '</strong>' +
 
       '</div>' +
@@ -3289,7 +3427,9 @@
       '<span>Completed stages</span>' +
 
       '<strong>' +
-      summary.count +
+
+      sum.count +
+
       '</strong>' +
 
       '</div>' +
@@ -3299,14 +3439,20 @@
       '<span>Study days</span>' +
 
       '<strong>' +
-      summary.days.length +
+
+      sum.days.length +
+
       '</strong>' +
 
       '</div>' +
 
       '</div>' +
 
-      '<h3 style="margin-top:20px">Your study mix</h3>' +
+      '<h3 style="margin-top:20px">' +
+
+      'Your study mix' +
+
+      '</h3>' +
 
       '<div class="mixbar" aria-hidden="true">' +
 
@@ -3338,7 +3484,7 @@
 
             (
               stageTotal
-                ? summary
+                ? sum
                     .stages[
                       stage
                     ]
@@ -3392,7 +3538,7 @@
             ' ' +
 
             pct(
-              summary
+              sum
                 .stages[
                   stage
                 ]
@@ -3412,7 +3558,7 @@
       'Stage percentages use study time, not Crosscheck. Crosscheck: ' +
 
       human(
-        summary.crossSeconds
+        sum.crossSeconds
       ) +
 
       '. There is no required perfect percentage.' +
@@ -3490,7 +3636,7 @@
 
             : null;
 
-        const latest =
+        const displayed =
           ref ||
           latestReflection(
             className,
@@ -3498,8 +3644,8 @@
           );
 
         const advice =
-          latest?.recommendation ||
-          recommendation(
+          displayed?.recommendation ||
+          recommend(
             classSummary
           );
 
@@ -3523,9 +3669,11 @@
           ' COMPLETED STAGES</span>' +
 
           '<h2>' +
+
           esc(
             className
           ) +
+
           '</h2>' +
 
           '</div>' +
@@ -3538,8 +3686,9 @@
               6
             ) <=
               today()
+              ? '<button class="secondary" ' +
 
-              ? '<button class="secondary" data-reflection-class="' +
+                'data-reflection-class="' +
 
                 esc(
                   className
@@ -3553,8 +3702,8 @@
 
                 (
                   ref
-                    ? 'Update ratings'
-                    : 'Weekly check-in'
+                    ? "Update ratings"
+                    : "Weekly check-in"
                 ) +
 
                 '</button>'
@@ -3565,11 +3714,11 @@
           '</div>';
 
         if (
-          latest?.recommendation
+          displayed?.recommendation
         ) {
           html +=
             feedbackHtml(
-              latest
+              displayed
             );
 
         } else {
@@ -3577,15 +3726,19 @@
             '<div class="coach">' +
 
             '<h3>' +
+
             esc(
               advice.title
             ) +
+
             '</h3>' +
 
             '<p>' +
+
             esc(
               advice.text
             ) +
+
             '</p>' +
 
             '</div>';
@@ -3595,8 +3748,8 @@
           periodKind ===
           "month"
         ) {
-          const rating =
-            ratingSummary(
+          const ratings =
+            ratingSeries(
               className,
               periodKey,
               end
@@ -3605,22 +3758,27 @@
           html +=
             '<div class="coach">' +
 
-            '<span class="eyebrow">MONTHLY OUTCOMES</span>' +
+            '<span class="eyebrow">' +
+
+            'MONTHLY OUTCOMES' +
+
+            '</span>' +
 
             '<p><strong>Learning:</strong> ' +
 
             (
-              rating
+              ratings
                 .learning
                 .length
-                ? rating
+                ? ratings
                     .learning
                     .join(
                       " → "
                     ) +
                   '/5 · ' +
-                  rating
-                    .learningTrend
+                  trendText(
+                    ratings.learning
+                  )
 
                 : 'not rated'
             ) +
@@ -3630,17 +3788,18 @@
             '<p><strong>Assessment:</strong> ' +
 
             (
-              rating
+              ratings
                 .assessment
                 .length
-                ? rating
+                ? ratings
                     .assessment
                     .join(
                       " → "
                     ) +
                   '/5 · ' +
-                  rating
-                    .assessmentTrend
+                  trendText(
+                    ratings.assessment
+                  )
 
                 : 'no assessment ratings in this month'
             ) +
@@ -3659,7 +3818,11 @@
         html +=
           '<details>' +
 
-          '<summary>Methods within each stage</summary>';
+          '<summary>' +
+
+          'Methods within each stage' +
+
+          '</summary>';
 
         [
           1,
@@ -3690,9 +3853,11 @@
               '<div class="stage-details">' +
 
               '<h3>' +
+
               stageName(
                 stage
               ) +
+
               '</h3>';
 
             if (
@@ -3746,26 +3911,34 @@
                       '<tr>' +
 
                       '<td>' +
+
                       esc(
                         method
                       ) +
+
                       '</td>' +
 
                       '<td class="num">' +
+
                       data.count +
+
                       '</td>' +
 
                       '<td class="num">' +
+
                       pct(
                         data.count,
                         s.count
                       ) +
+
                       '</td>' +
 
                       '<td class="num">' +
+
                       human(
                         data.seconds
                       ) +
+
                       '</td>' +
 
                       '</tr>'
@@ -3787,7 +3960,7 @@
         html +=
           '</details>';
 
-        const recentEight =
+        const recent =
           historyList()
             .filter(
               r =>
@@ -3810,38 +3983,46 @@
             );
 
         if (
-          recentEight.length
+          recent.length
         ) {
           html +=
             '<details>' +
 
-            '<summary>My longer-term pattern · recent check-ins</summary>' +
+            '<summary>' +
 
-            recentEight
+            'My longer-term pattern · recent check-ins' +
+
+            '</summary>' +
+
+            recent
               .map(
                 r =>
                   '<p class="small">' +
 
                   '<strong>' +
+
                   esc(
                     rangeLabel(
                       r.weekStart
                     )
                   ) +
-                  '</strong> · ' +
 
-                  'learning ' +
+                  '</strong> · learning ' +
+
                   esc(
                     r.learningRating
                   ) +
+
                   '/5 · ' +
 
                   (
                     r.hadAssessment
                       ? 'assessment ' +
+
                         esc(
                           r.assessmentRating
                         ) +
+
                         '/5'
 
                       : 'no assessment'
@@ -3851,7 +4032,7 @@
 
                   esc(
                     r.recommendation?.text ||
-                    'No recommendation saved'
+                    "No recommendation saved"
                   ) +
 
                   '</p>'
@@ -3913,6 +4094,10 @@
       };
   }
 
+  // ================================================
+  // WEEKLY CHECK-IN
+  // ================================================
+
   function ratingField(
     name,
     label
@@ -3921,7 +4106,9 @@
       '<fieldset>' +
 
       '<legend>' +
+
       label +
+
       '</legend>' +
 
       '<div class="rating-grid">' +
@@ -3934,19 +4121,27 @@
         5
       ]
         .map(
-          n =>
+          value =>
             '<label class="rating-option">' +
 
             '<input type="radio" name="' +
+
             name +
+
             '" value="' +
-            n +
+
+            value +
+
             '" aria-label="' +
-            n +
+
+            value +
+
             ' out of 5">' +
 
             '<span>' +
-            n +
+
+            value +
+
             '</span>' +
 
             '</label>'
@@ -4016,20 +4211,28 @@
     dialog.innerHTML =
       '<form id="reflectionForm">' +
 
-      '<span class="badge">WEEKLY CHECK-IN</span>' +
+      '<span class="badge">' +
+
+      'WEEKLY CHECK-IN' +
+
+      '</span>' +
 
       '<h2 id="reflectionTitle">' +
+
       esc(
         reflectionTarget.className
       ) +
+
       '</h2>' +
 
       '<p class="small">' +
+
       esc(
         rangeLabel(
           reflectionTarget.weekStart
         )
       ) +
+
       '</p>' +
 
       '<p>' +
@@ -4050,7 +4253,7 @@
 
       '<p class="small">' +
 
-      'Choose “No assessment this week” when there was no graded assessment. That does not count as a zero and does not block learning feedback.' +
+      'Choose No assessment this week when there was no graded assessment. That does not count as a zero and does not block learning feedback.' +
 
       '</p>' +
 
@@ -4078,9 +4281,11 @@
       const l =
         dialog.querySelector(
           'input[name="learning"][value="' +
+
           Number(
             saved.learningRating
           ) +
+
           '"]'
         );
 
@@ -4224,7 +4429,7 @@
             );
 
           record.recommendation =
-            recommendation(
+            recommend(
               snapshot,
               record,
               previous
@@ -4251,26 +4456,33 @@
           }
 
           dialog.innerHTML =
-            '<span class="badge">RATINGS SAVED ON THIS DEVICE</span>' +
+            '<span class="badge">' +
 
-            '<h2 id="reflectionTitle">Your week in ' +
+            'RATINGS SAVED ON THIS DEVICE' +
+
+            '</span>' +
+
+            '<h2 id="reflectionTitle">' +
+
+            'Your week in ' +
+
             esc(
               className
             ) +
+
             '</h2>' +
 
-            '<p>' +
+            '<p><strong>Learning:</strong> ' +
 
-            '<strong>Learning:</strong> ' +
             learning +
-            '/5<br>' +
 
-            '<strong>Assessment:</strong> ' +
+            '/5<br><strong>Assessment:</strong> ' +
 
             (
               record.hadAssessment
                 ? record.assessmentRating +
                   '/5'
+
                 : 'No assessment this week'
             ) +
 
@@ -4306,8 +4518,18 @@
           updateSync();
 
         } catch (error) {
-          $("reflectionError").textContent =
-            error.message;
+          const output =
+            $("reflectionError");
+
+          if (output) {
+            output.textContent =
+              error.message;
+
+          } else {
+            message(
+              error.message
+            );
+          }
         }
       };
 
@@ -4346,6 +4568,10 @@
       80
     );
   }
+
+  // ================================================
+  // SYNC
+  // ================================================
 
   function enqueue(
     key,
@@ -4493,12 +4719,12 @@
           record.method,
 
         studySeconds:
-          number(
+          n(
             record.studySeconds
           ),
 
         crosscheckSeconds:
-          number(
+          n(
             record.crosscheckSeconds
           ),
 
@@ -4507,10 +4733,10 @@
           "",
 
         totalSeconds:
-          number(
+          n(
             record.studySeconds
           ) +
-          number(
+          n(
             record.crosscheckSeconds
           )
       }
@@ -4520,13 +4746,18 @@
   function queueReflection(record) {
     enqueue(
       "reflection:" +
+
       deviceId() +
+
       ":" +
+
       reflectionKey(
         record.weekStart,
         record.className
       ) +
+
       ":" +
+
       record.revisionId,
 
       {
@@ -4702,16 +4933,14 @@
           true;
 
         Object.entries(
-          Object.assign(
-            {},
-            payload,
-            {
-              requestId,
+          {
+            ...payload,
 
-              replyOrigin:
-                location.origin
-            }
-          )
+            requestId,
+
+            replyOrigin:
+              location.origin
+          }
         ).forEach(
           (
             [
@@ -5094,11 +5323,9 @@
     );
   }
 
-  /*
-    --------------------------------------------------
-    BACKUP / RECOVERY
-    --------------------------------------------------
-  */
+  // ================================================
+  // BACKUP + RESTORE
+  // ================================================
 
   function backupData() {
     const data =
@@ -5139,8 +5366,8 @@
         new Date()
           .toISOString(),
 
-      recoveryId:
-        deviceId(),
+      recoveryCode:
+        recoveryCode(),
 
       data
     };
@@ -5195,43 +5422,45 @@
   }
 
   function renderBackup() {
-    const recoveryId =
-      deviceId();
+    const code =
+      recoveryCode();
 
     root.innerHTML =
       '<section class="card">' +
 
       '<span class="eyebrow">BACKUP & RECOVERY</span>' +
 
-      '<h2>Keep your study history safe</h2>' +
+      '<h2>Your recovery code</h2>' +
 
       '<div class="coach">' +
 
-      '<span class="eyebrow">YOUR ANONYMOUS RECOVERY ID</span>' +
+      '<span class="eyebrow">YOUR 6-DIGIT RECOVERY CODE</span>' +
 
-      '<h3 id="recoveryIdDisplay">' +
+      '<h2 id="recoveryCodeDisplay" style="font-size:2.4rem;letter-spacing:.18em">' +
+
       esc(
-        recoveryId
+        code
       ) +
-      '</h3>' +
+
+      '</h2>' +
 
       '<p class="small">' +
 
-      'This ID should stay exactly the same when you refresh, close the page, or return later in this same browser. Studying, syncing, or answering a check-in should not change it.' +
+      'Keep this code somewhere safe. It stays the same in this browser. Refreshing, studying, syncing, or answering a check-in does not change it.' +
 
       '</p>' +
 
-      '<button class="secondary" data-action="copy-recovery-id">' +
+      '<button class="secondary" data-action="copy-recovery-code">' +
 
-      'Copy recovery ID' +
+      'Copy recovery code' +
 
       '</button>' +
 
       '</div>' +
 
-      '<p>' +
+      '<p class="muted">' +
 
-      'Your classes and study history are stored on this browser. Export a backup before clearing website data or changing devices.' +
+      'The app keeps its long internal device ID hidden in the background. Students only need this six-digit code.' +
 
       '</p>' +
 
@@ -5253,7 +5482,7 @@
 
       '<p class="small">' +
 
-      'A normal refresh should never create a new recovery ID.' +
+      'A normal refresh should never create a new recovery code. Clearing this site\'s browser storage can remove the local copy, so export a backup before clearing site data or changing devices.' +
 
       '</p>' +
 
@@ -5281,31 +5510,36 @@
 
     const backupId =
       cleanDeviceId(
-        backup.recoveryId ||
         backup.data[
           K.device
+        ]
+      );
+
+    const backupCode =
+      cleanRecoveryCode(
+        backup.recoveryCode ||
+        backup.data[
+          K.recovery
         ]
       );
 
     const currentId =
       deviceId();
 
+    const currentCode =
+      recoveryCode();
+
     const hasCurrentStudyData =
-      classes().length >
-        0 ||
-
-      sessions().length >
-        0 ||
-
-      Object.keys(
-        reflections()
-      ).length >
-        0 ||
-
-      Object.keys(
-        reflectionHistory()
-      ).length >
-        0;
+      !!(
+        classes().length ||
+        sessions().length ||
+        Object.keys(
+          reflections()
+        ).length ||
+        Object.keys(
+          reflectionHistory()
+        ).length
+      );
 
     if (
       backupId &&
@@ -5314,11 +5548,11 @@
       hasCurrentStudyData
     ) {
       throw new Error(
-        "This backup belongs to a different recovery ID. This browser already contains Study System data, so the app will not mix the two identities."
+        "This backup belongs to a different Study System record. This browser already contains study data, so the app will not mix the two records."
       );
     }
 
-    let adoptBackupId =
+    let adoptBackupIdentity =
       false;
 
     if (
@@ -5327,13 +5561,13 @@
         currentId &&
       !hasCurrentStudyData
     ) {
-      adoptBackupId =
+      adoptBackupIdentity =
         confirm(
-          "This empty browser has a different recovery ID. Restore this backup and adopt its recovery ID?"
+          "This browser is empty. Restore the backup and its saved recovery code?"
         );
 
       if (
-        !adoptBackupId
+        !adoptBackupIdentity
       ) {
         return;
       }
@@ -5347,35 +5581,34 @@
       return;
     }
 
-    const parseStored =
-      (
-        key,
-        fallback
-      ) => {
-        if (
+    const parseStored = (
+      key,
+      fallback
+    ) => {
+      if (
+        backup.data[
+          key
+        ] ===
+          undefined ||
+        backup.data[
+          key
+        ] ===
+          null
+      ) {
+        return fallback;
+      }
+
+      try {
+        return JSON.parse(
           backup.data[
             key
-          ] ===
-            undefined ||
-          backup.data[
-            key
-          ] ===
-            null
-        ) {
-          return fallback;
-        }
+          ]
+        );
 
-        try {
-          return JSON.parse(
-            backup.data[
-              key
-            ]
-          );
-
-        } catch (error) {
-          return fallback;
-        }
-      };
+      } catch (error) {
+        return fallback;
+      }
+    };
 
     const incomingClasses =
       parseStored(
@@ -5482,10 +5715,10 @@
           );
 
         } else if (
-          number(
+          n(
             record.totalSeconds
           ) >
-          number(
+          n(
             mergedSessions[
               index
             ].totalSeconds
@@ -5576,7 +5809,6 @@
 
         const key =
           record.revisionId ||
-
           JSON.stringify(
             [
               record.className,
@@ -5612,12 +5844,8 @@
       mergedHistory
     );
 
-    /*
-      An empty browser may adopt the backup's ID.
-      An existing browser keeps its established ID.
-    */
     if (
-      adoptBackupId &&
+      adoptBackupIdentity &&
       backupId
     ) {
       rawWrite(
@@ -5636,6 +5864,28 @@
 
       stableDeviceId =
         currentId;
+    }
+
+    if (
+      adoptBackupIdentity &&
+      backupCode
+    ) {
+      rawWrite(
+        K.recovery,
+        backupCode
+      );
+
+      stableRecoveryCode =
+        backupCode;
+
+    } else {
+      rawWrite(
+        K.recovery,
+        currentCode
+      );
+
+      stableRecoveryCode =
+        currentCode;
     }
 
     Object.entries(
@@ -5751,11 +6001,9 @@
       }
     };
 
-  /*
-    --------------------------------------------------
-    BUTTONS
-    --------------------------------------------------
-  */
+  // ================================================
+  // BUTTONS
+  // ================================================
 
   document.addEventListener(
     "click",
@@ -6178,9 +6426,9 @@
 
             break;
 
-          case "copy-recovery-id": {
-            const id =
-              deviceId();
+          case "copy-recovery-code": {
+            const code =
+              recoveryCode();
 
             if (
               navigator.clipboard &&
@@ -6188,24 +6436,28 @@
             ) {
               navigator.clipboard
                 .writeText(
-                  id
+                  code
                 )
                 .then(
                   () =>
                     message(
-                      "Recovery ID copied."
+                      "Recovery code copied."
                     )
                 )
                 .catch(
                   () =>
                     message(
-                      "Could not copy automatically. Select the recovery ID and copy it manually."
+                      "Your recovery code is " +
+                      code +
+                      "."
                     )
                 );
 
             } else {
               message(
-                "Select the recovery ID and copy it manually."
+                "Your recovery code is " +
+                code +
+                "."
               );
             }
 
@@ -6225,6 +6477,10 @@
       }
     )
   );
+
+  // ================================================
+  // STARTUP + EVENTS
+  // ================================================
 
   $("syncNow").onclick =
     () =>
@@ -6292,50 +6548,45 @@
     )
   );
 
-  /*
-    If another tab changes the recovery ID,
-    do not silently accept the change.
-  */
   window.addEventListener(
     "storage",
 
     safe(
       event => {
         if (
+          event.key ===
+          K.recovery
+        ) {
+          const changed =
+            cleanRecoveryCode(
+              event.newValue
+            );
+
+          if (
+            stableRecoveryCode &&
+            changed &&
+            changed !==
+              stableRecoveryCode
+          ) {
+            message(
+              "The recovery code changed in another tab. Export a backup before continuing."
+            );
+
+            return;
+          }
+        }
+
+        if (
           [
             K.classes,
             K.sessions,
-            K.reflections,
-            K.device
+            K.reflections
           ].includes(
             event.key
           ) &&
           !active &&
           !dialog.open
         ) {
-          if (
-            event.key ===
-            K.device
-          ) {
-            const current =
-              cleanDeviceId(
-                event.newValue
-              );
-
-            if (
-              stableDeviceId &&
-              current &&
-              current !==
-                stableDeviceId
-            ) {
-              message(
-                "The recovery ID changed in another tab. Export a backup before continuing."
-              );
-
-              return;
-            }
-          }
-
           render();
         }
       }
@@ -6346,14 +6597,12 @@
     safe(
       () => {
         if (active) {
-          const clockEl =
+          const clock =
             $("clock");
 
-          if (
-            clockEl
-          ) {
-            clockEl.textContent =
-              clock(
+          if (clock) {
+            clock.textContent =
+              timerText(
                 elapsedMs() /
                 1000
               );
@@ -6401,17 +6650,7 @@
     15000
   );
 
-  /*
-    --------------------------------------------------
-    STARTUP
-    --------------------------------------------------
-  */
-
   function init() {
-    /*
-      Validate the existing local data first.
-      Nothing is intentionally cleared.
-    */
     classes();
 
     sessions();
@@ -6421,11 +6660,12 @@
     reflectionHistory();
 
     /*
-      Establish the persistent anonymous recovery ID.
-
-      Existing studySystem.deviceId.v4 is reused.
+      Hidden UUID remains the backend identity.
+      The student-facing recovery code is six digits.
     */
     deviceId();
+
+    recoveryCode();
 
     if (
       !localStorage.getItem(
@@ -6434,6 +6674,7 @@
     ) {
       rawWrite(
         K.start,
+
         weekStart(
           today()
         )
@@ -6446,10 +6687,6 @@
         null
       );
 
-    /*
-      If the browser closed while a timer was running,
-      restore it paused at its last saved checkpoint.
-    */
     if (active) {
       if (
         active.runningSince !==
@@ -6495,11 +6732,6 @@
 
     render();
 
-    /*
-      Requeue existing locally saved records when needed.
-      The receipt system prevents already-confirmed records
-      from being resent unnecessarily.
-    */
     sessions()
       .filter(
         record =>
@@ -6537,9 +6769,11 @@
       '<h2>Your saved data needs attention</h2>' +
 
       '<p>' +
+
       esc(
         error.message
       ) +
+
       '</p>' +
 
       '<p class="small">Do not clear website data.</p>' +
