@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en">
+
 <head>
+
   <meta charset="utf-8">
 
   <meta
@@ -11,25 +13,45 @@
     name="color-scheme"
     content="light">
 
-  <title>Study System • Study Coach</title>
+  <title>
+    Study System • Study Coach
+  </title>
 
   <link
     rel="stylesheet"
     href="styles.css?v=coach-20261006-2">
+
 </head>
 
+
 <body>
+
 
   <header class="masthead">
 
     <div class="brand">
-      <span class="logo" aria-hidden="true">S</span>
+
+      <span
+        class="logo"
+        aria-hidden="true">
+        S
+      </span>
+
 
       <div>
-        <span class="eyebrow">STUDY SYSTEM</span>
-        <h1>Study Coach</h1>
+
+        <span class="eyebrow">
+          STUDY SYSTEM
+        </span>
+
+        <h1>
+          Study Coach
+        </h1>
+
       </div>
+
     </div>
+
 
     <nav
       id="navigation"
@@ -38,18 +60,26 @@
 
   </header>
 
-  <main id="appRoot" tabindex="-1">
+
+  <main
+    id="appRoot"
+    tabindex="-1">
 
     <section class="card">
-      <h2>Loading your saved classes…</h2>
+
+      <h2>
+        Loading your saved classes…
+      </h2>
 
       <p>
         Allow the page to finish loading.
         Do not clear your saved website data.
       </p>
+
     </section>
 
   </main>
+
 
   <aside class="sync-strip">
 
@@ -58,14 +88,18 @@
       role="status">
     </span>
 
+
     <button
       id="syncNow"
       class="text-button"
       type="button">
+
       Sync now
+
     </button>
 
   </aside>
+
 
   <p
     id="message"
@@ -74,19 +108,31 @@
     aria-live="polite">
   </p>
 
+
   <footer>
+
     Learn → Retrieval → Crosscheck → Assess.
     Anki is Stage 3 — Assess.
+
     <br>
-    Keep a backup before clearing website data or changing devices.
+
+    Keep a backup before clearing website data
+    or changing devices.
+
     <br>
-    <span id="coachVersion">Loading coaching version…</span>
+
+    <span id="coachVersion">
+      Loading coaching version…
+    </span>
+
   </footer>
+
 
   <dialog
     id="reflectionDialog"
     aria-labelledby="reflectionTitle">
   </dialog>
+
 
   <input
     id="backupInput"
@@ -94,12 +140,51 @@
     accept="application/json,.json"
     hidden>
 
+
   <noscript>
-    <p>Enable JavaScript to use Study Coach.</p>
+
+    <p>
+      Enable JavaScript to use Study Coach.
+    </p>
+
   </noscript>
 
-  <script src="config.js?v=coach-20261006-2"></script>
-  <script src="app.js?v=stable-code-20261013-2"></script>
+
+  <!-- Existing backend configuration -->
+  <script
+    src="config.js?v=coach-20261006-2">
+  </script>
+
+
+  <!--
+    EXISTING STUDY SYSTEM.
+    DO NOT REPLACE THIS FILE.
+
+    It owns:
+    - student records
+    - timers
+    - weekly check-ins
+    - recovery
+    - Study Log
+    - cloud syncing
+    - local safety backups
+  -->
+  <script
+    src="app.js?v=stable-code-20261013-2">
+  </script>
+
+
+  <!--
+    FOCUSED PROGRESS VIEW.
+
+    This reads the existing Study System records
+    and replaces only the Progress presentation.
+  -->
+  <script
+    src="progress-v2.js?v=focused-progress-20261016-3">
+  </script>
+
 
 </body>
+
 </html>
