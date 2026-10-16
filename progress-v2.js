@@ -3,20 +3,25 @@
 
   /*
     STUDY SYSTEM — FOCUSED PROGRESS VIEW
-    Version: focused-progress-20261016-3
+    Version: focused-progress-20261016-4
 
     DATA SAFETY
-    - Reads the existing Study System records.
+    - Reads existing Study System records.
     - Does not rename, migrate, delete, or replace student data.
-    - app.js still owns saving, recovery, timers, check-ins, Study Log,
-      Google sync, and backups.
+    - app.js still owns saving, recovery, timers, check-ins,
+      Study Log, Google sync, and backups.
     - Removing this file returns the original Progress page.
 
-    COACHING
-    - Uses CoachRules / StudyFollowup / StudyMonthly from app.js.
-    - Adds one "practice amount" check so a student who is using the
-      useful stages but has weak results and too little practice can be
-      told to add another session before changing the whole approach.
+    STUDENT VIEW
+    - This Week
+    - Last Week
+    - This Month
+    - Prior Month
+    - Actual time above allocation graph
+    - One interpretation
+    - One next step
+    - Distinguishes "study more" from "study differently"
+    - Visual progress snapshot for sharing/email
   */
 
   if (
@@ -29,7 +34,7 @@
   }
 
   const C = StudyCoach;
-  const BUILD = "focused-progress-20261016-3";
+  const BUILD = "focused-progress-20261016-4";
 
   const K = {
     classes: "studySystem.classes.v4",
@@ -117,7 +122,7 @@
 
 
   // =====================================================
-  // READ-ONLY ACCESS TO EXISTING STUDENT DATA
+  // READ EXISTING STUDENT DATA
   // =====================================================
 
   function readJson(key, fallback) {
@@ -133,7 +138,6 @@
     }
   }
 
-
   function objectOrEmpty(value) {
     return (
       value &&
@@ -144,13 +148,11 @@
       : {};
   }
 
-
   function owner() {
     return String(
       localStorage.getItem(K.device) || ""
     );
   }
-
 
   function sessions() {
     const value = readJson(
@@ -162,7 +164,6 @@
       ? value
       : [];
   }
-
 
   function savedClasses() {
     const value = readJson(
@@ -182,7 +183,6 @@
     );
   }
 
-
   function currentReflections() {
     return objectOrEmpty(
       readJson(
@@ -191,7 +191,6 @@
       )
     );
   }
-
 
   function historyList() {
     const map = new Map();
@@ -228,11 +227,6 @@
     return [...map.values()];
   }
 
-
-  /*
-    Newest valid check-in for each class + week
-    belonging to this student.
-  */
   function latestChecks(className) {
     const me = owner();
     const newest = new Map();
@@ -262,15 +256,15 @@
         return;
       }
 
-      const old =
+      const previous =
         newest.get(
           record.weekStart
         );
 
       if (
-        !old ||
+        !previous ||
         String(record.timestamp) >
-          String(old.timestamp)
+          String(previous.timestamp)
       ) {
         newest.set(
           record.weekStart,
@@ -287,7 +281,6 @@
           )
       );
   }
-
 
   function rowsBetween(
     start,
@@ -311,7 +304,6 @@
         );
       });
   }
-
 
   function rowsForWeek(
     className,
@@ -347,7 +339,6 @@
     );
   }
 
-
   function human(seconds) {
     const amount =
       Math.max(
@@ -380,13 +371,9 @@
       minutes % 60;
 
     return rest
-      ? hours +
-          " hr " +
-          rest +
-          " min"
+      ? hours + " hr " + rest + " min"
       : hours + " hr";
   }
-
 
   function prettyDate(
     key,
@@ -410,7 +397,6 @@
       }
     );
   }
-
 
   function rangeLabel(
     start,
@@ -439,7 +425,6 @@
     );
   }
 
-
   function monthLabel(start) {
     return new Date(
       start + "T12:00:00Z"
@@ -451,7 +436,6 @@
       }
     );
   }
-
 
   function previousMonth(key) {
     const date =
@@ -468,7 +452,6 @@
       .toISOString()
       .slice(0, 10);
   }
-
 
   function median(values) {
     const sorted =
@@ -499,6 +482,25 @@
         sorted[middle - 1] +
         sorted[middle]
       ) / 2;
+  }
+
+  function safeFilename(value) {
+    return String(
+      value || "progress"
+    )
+      .replace(
+        /[^a-z0-9]+/gi,
+        "-"
+      )
+      .replace(
+        /^-+|-+$/g,
+        ""
+      )
+      .slice(
+        0,
+        60
+      )
+      .toLowerCase();
   }
 
 
@@ -618,7 +620,6 @@
     );
   }
 
-
   function rating(record) {
     return record
       ? CoachRules.rate(
@@ -627,23 +628,19 @@
       : null;
   }
 
-
   function assessment(record) {
     return record
       ? CoachRules.assessment(record)
       : null;
   }
 
-
   function isStrong(record) {
     return CoachRules.strong(record);
   }
 
-
   function isConcern(record) {
     return CoachRules.concerns(record);
   }
-
 
   function followupFor(record) {
     const saved =
@@ -670,9 +667,6 @@
         );
 
       } catch (error) {
-        /*
-          Fall through to the saved advice.
-        */
       }
     }
 
@@ -683,7 +677,6 @@
       ? saved
       : null;
   }
-
 
   function snapshotFor(rows) {
     const snapshot =
@@ -697,7 +690,6 @@
     return snapshot;
   }
 
-
   function stageOf(advice) {
     return advice
       ? (
@@ -707,7 +699,6 @@
       )
       : 0;
   }
-
 
   function visitCount(rows) {
     return new Set(
@@ -721,17 +712,7 @@
     ).size;
   }
 
-
-  /*
-    Count separate Retrieval sessions that
-    actually include Crosscheck.
-
-    If older records have no visit ID,
-    separate study days are used instead.
-  */
-  function retrievalCrosscheckRounds(
-    rows
-  ) {
+  function retrievalCrosscheckRounds(rows) {
     const checked =
       rows.filter(
         row =>
@@ -744,7 +725,7 @@
           ) > 0
       );
 
-    const ids =
+    const visitIds =
       new Set(
         checked
           .filter(
@@ -755,8 +736,8 @@
           )
       );
 
-    if (ids.size) {
-      return ids.size;
+    if (visitIds.size) {
+      return visitIds.size;
     }
 
     return new Set(
@@ -768,7 +749,6 @@
         .filter(Boolean)
     ).size;
   }
-
 
   function stageSeconds(
     summary,
@@ -782,7 +762,6 @@
     );
   }
 
-
   function crossSeconds(summary) {
     return C.number(
       summary &&
@@ -790,13 +769,6 @@
     );
   }
 
-
-  /*
-    "Right stages" for the dosage check:
-    Retrieval happened,
-    Crosscheck happened,
-    Assess happened.
-  */
   function usefulSequence(summary) {
     return (
       stageSeconds(
@@ -814,7 +786,6 @@
       ) > 0
     );
   }
-
 
   function hasTestLikeAssess(summary) {
     const methods =
@@ -845,7 +816,6 @@
     );
   }
 
-
   function summaryForCheck(record) {
     const rows =
       rowsForWeek(
@@ -869,10 +839,10 @@
   }
 
 
-  /*
-    Previous strong weeks become
-    the student's own practice baseline.
-  */
+  // =====================================================
+  // PERSONAL PRACTICE-AMOUNT CHECK
+  // =====================================================
+
   function successfulDoseHistory(
     className,
     beforeWeek
@@ -932,18 +902,6 @@
       );
   }
 
-
-  /*
-    Decide whether weak results may need
-    MORE PRACTICE before changing the
-    whole study approach.
-
-    There is no universal required
-    number of minutes.
-
-    The student's own successful weeks
-    are preferred.
-  */
   function doseSignal(
     className,
     record,
@@ -964,12 +922,6 @@
     const assess =
       assessment(record);
 
-
-    /*
-      If learning feels strong but assessment
-      is low, first make sure Assess resembles
-      the real task before saying "do more."
-    */
     if (
       learning !== null &&
       learning >= 4 &&
@@ -979,7 +931,6 @@
     ) {
       return null;
     }
-
 
     const history =
       successfulDoseHistory(
@@ -1002,13 +953,11 @@
         ? summary.days.length
         : 0;
 
-
     if (history.length) {
       const baselineSeconds =
         median(
           history.map(
-            item =>
-              item.seconds
+            item => item.seconds
           )
         );
 
@@ -1016,12 +965,10 @@
         median(
           history
             .map(
-              item =>
-                item.visits
+              item => item.visits
             )
             .filter(
-              value =>
-                value > 0
+              value => value > 0
             )
         );
 
@@ -1029,61 +976,52 @@
         median(
           history
             .map(
-              item =>
-                item.days
+              item => item.days
             )
             .filter(
-              value =>
-                value > 0
+              value => value > 0
             )
         );
 
-
-      /*
-        With one successful baseline week,
-        require a larger difference.
-
-        With multiple successful weeks,
-        compare against the student's
-        own typical successful amount.
-      */
       const timeFactor =
         history.length >= 2
           ? 0.70
           : 0.60;
 
-
       const muchLessTime =
-        baselineSeconds &&
-        currentSeconds > 0 &&
-        currentSeconds <
-          baselineSeconds *
-          timeFactor;
-
+        Boolean(
+          baselineSeconds &&
+          currentSeconds > 0 &&
+          currentSeconds <
+            baselineSeconds *
+            timeFactor
+        );
 
       const fewerVisits =
-        baselineVisits &&
-        currentVisits > 0 &&
-        currentVisits <
-          Math.max(
-            1,
-            Math.floor(
-              baselineVisits
+        Boolean(
+          baselineVisits &&
+          currentVisits > 0 &&
+          currentVisits <
+            Math.max(
+              1,
+              Math.floor(
+                baselineVisits
+              )
             )
-          );
-
+        );
 
       const fewerDays =
-        baselineDays &&
-        currentDays > 0 &&
-        currentDays <
-          Math.max(
-            1,
-            Math.floor(
-              baselineDays
+        Boolean(
+          baselineDays &&
+          currentDays > 0 &&
+          currentDays <
+            Math.max(
+              1,
+              Math.floor(
+                baselineDays
+              )
             )
-          );
-
+        );
 
       if (
         muchLessTime ||
@@ -1099,23 +1037,11 @@
       }
     }
 
-
-    /*
-      No personal successful baseline yet:
-
-      One complete Retrieval →
-      Crosscheck → Assess round with
-      a weak result is not enough reason
-      to rebuild an otherwise useful pattern.
-
-      Try another round first.
-    */
     const oneVisit =
       currentVisits === 1;
 
     const oneDay =
       currentDays === 1;
-
 
     if (
       !history.length &&
@@ -1128,15 +1054,16 @@
       )
     ) {
       return {
-        kind: "one-round",
-        baselineSeconds: null
+        kind:
+          "one-round",
+
+        baselineSeconds:
+          null
       };
     }
 
-
     return null;
   }
-
 
   function doseVerdict(
     className,
@@ -1156,13 +1083,11 @@
       return null;
     }
 
-
     const learning =
       rating(record);
 
     const assess =
       assessment(record);
-
 
     const interpretation =
       signal.kind ===
@@ -1178,7 +1103,6 @@
           "but this was only one practice round. " +
           "Try more practice before changing the whole approach."
         );
-
 
     if (
       assess !== null &&
@@ -1200,11 +1124,11 @@
         2,
 
         {
-          focus: "session"
+          focus:
+            "session"
         }
       );
     }
-
 
     return verdict(
       "session",
@@ -1219,11 +1143,16 @@
       2,
 
       {
-        focus: "session"
+        focus:
+          "session"
       }
     );
   }
 
+
+  // =====================================================
+  // COMPLETED WEEK COACHING
+  // =====================================================
 
   function completedWeekCoach(
     className,
@@ -1231,28 +1160,23 @@
     summary,
     rows
   ) {
-
     if (!record) {
-
       if (!summary.seconds) {
         return verdict(
           "start",
 
           "No study time was recorded for this class.",
 
-          (
-            "Start one short session: " +
-            "Retrieval from memory, then Crosscheck."
-          ),
+          "Start one short session: Retrieval from memory, then Crosscheck.",
 
           2,
 
           {
-            focus: "session"
+            focus:
+              "session"
           }
         );
       }
-
 
       return verdict(
         "checkin",
@@ -1265,29 +1189,18 @@
           ", but you haven't rated how it went."
         ),
 
-        (
-          "Answer the two-question check-in " +
-          "to get your next step."
-        ),
+        "Answer the two-question check-in to get your next step.",
 
         0,
 
         {
-          needsCheckIn: true
+          needsCheckIn:
+            true
         }
       );
     }
 
-
-    /*
-      GOOD RESULTS:
-      Continue.
-
-      Do not force a more even-looking graph.
-    */
-    if (
-      isStrong(record)
-    ) {
+    if (isStrong(record)) {
       return verdict(
         "keep",
 
@@ -1296,27 +1209,17 @@
           "Your current study pattern does not need to be made more even."
         ),
 
-        (
-          "Continue the same approach " +
-          "in your next study week."
-        ),
+        "Continue the same approach in your next study week.",
 
-        2,
+        0,
 
         {
-          focus: "maintain"
+          focus:
+            "maintain"
         }
       );
     }
 
-
-    /*
-      RIGHT STAGES + WEAK RESULT +
-      LOW PRACTICE AMOUNT:
-
-      add another session before changing
-      the whole strategy.
-    */
     const dose =
       doseVerdict(
         className,
@@ -1329,11 +1232,6 @@
       return dose;
     }
 
-
-    /*
-      Otherwise use the existing Study System
-      coaching engine.
-    */
     const followup =
       followupFor(record);
 
@@ -1351,16 +1249,14 @@
           "then check in again."
         ),
 
-        2
+        0
       );
     }
-
 
     const advice =
       StudyFollowup.normalize(
         followup.next
       );
-
 
     return verdict(
       followup.decision ||
@@ -1384,7 +1280,7 @@
 
 
   // =====================================================
-  // THIS WEEK — WHAT SHOULD I DO NOW?
+  // THIS WEEK
   // =====================================================
 
   function targetVisible(
@@ -1398,7 +1294,6 @@
       return false;
     }
 
-
     if (
       advice.focus ===
       "unobservable"
@@ -1406,18 +1301,18 @@
       return false;
     }
 
-
     try {
-      return StudyFollowup.metric(
-        snapshotFor(rows),
-        advice.focus
-      ).visible;
+      return StudyFollowup
+        .metric(
+          snapshotFor(rows),
+          advice.focus
+        )
+        .visible;
 
     } catch (error) {
       return false;
     }
   }
-
 
   function thisWeekCoach(
     className,
@@ -1430,29 +1325,22 @@
         .filter(
           record =>
             record.weekStart <
-            bounds.start
+              bounds.start
         )
         .pop() ||
       null;
 
-
-    /*
-      No prior completed check-in.
-    */
     if (!prior) {
       const first =
         CoachRules.recommend(
           summary
         );
 
-
       if (!summary.seconds) {
         return verdict(
           "start",
 
-          (
-            "Nothing is logged for this class yet this week."
-          ),
+          "Nothing is logged for this class yet this week.",
 
           (
             "Start one session. Use Learn only as needed, " +
@@ -1462,17 +1350,16 @@
           2,
 
           {
-            focus: "session"
+            focus:
+              "session"
           }
         );
       }
-
 
       const normalized =
         StudyFollowup.normalize(
           first
         );
-
 
       return verdict(
         "test",
@@ -1493,16 +1380,11 @@
       );
     }
 
-
-    /*
-      Reconstruct the most recent completed week.
-    */
     const priorRows =
       rowsForWeek(
         className,
         prior.weekStart
       );
-
 
     const priorSummary =
       priorRows.length
@@ -1516,7 +1398,6 @@
           C.summarize([])
         );
 
-
     const priorCoach =
       completedWeekCoach(
         className,
@@ -1525,10 +1406,6 @@
         priorRows
       );
 
-
-    /*
-      Most recent result was good.
-    */
     if (
       priorCoach.key ===
       "keep"
@@ -1536,32 +1413,19 @@
       return verdict(
         "keep",
 
-        (
-          "Your most recent completed results were strong."
-        ),
+        "Your most recent completed results were strong.",
 
-        (
-          "Continue the same study pattern this week."
-        ),
+        "Continue the same study pattern this week.",
 
-        priorCoach.stage,
+        0,
 
         {
-          focus: "maintain"
+          focus:
+            "maintain"
         }
       );
     }
 
-
-    /*
-      Most recent result said:
-      ADD ANOTHER SESSION.
-
-      Do not count random extra Learn time
-      as completing that recommendation.
-
-      Count actual Retrieval + Crosscheck rounds.
-    */
     if (
       priorCoach.key ===
       "session"
@@ -1582,7 +1446,6 @@
           priorRounds + 1
         );
 
-
       if (
         currentRounds >=
         targetRounds
@@ -1600,14 +1463,14 @@
             "before changing the approach."
           ),
 
-          2,
+          0,
 
           {
-            focus: "session"
+            focus:
+              "session"
           }
         );
       }
-
 
       return verdict(
         "session",
@@ -1622,19 +1485,14 @@
         2,
 
         {
-          focus: "session"
+          focus:
+            "session"
         }
       );
     }
 
-
-    /*
-      Otherwise continue using the existing
-      StudyFollowup recommendation.
-    */
     const followup =
       followupFor(prior);
-
 
     if (!followup) {
       return verdict(
@@ -1645,25 +1503,17 @@
           "recorded study to judge it."
         ),
 
-        (
-          "Study this week and complete your next check-in."
-        ),
+        "Study this week and complete your next check-in.",
 
-        2
+        0
       );
     }
-
 
     const advice =
       StudyFollowup.normalize(
         followup.next
       );
 
-
-    /*
-      If the suggested change already appears
-      this week, don't pile another change on.
-    */
     if (
       targetVisible(
         rows,
@@ -1673,16 +1523,14 @@
       return verdict(
         "test",
 
-        (
-          "You are already doing the suggested adjustment this week."
-        ),
+        "You are already doing the suggested adjustment this week.",
 
         (
           "Keep testing it until your next check-in. " +
           "Do not add another major change yet."
         ),
 
-        stageOf(advice),
+        0,
 
         {
           focus:
@@ -1690,7 +1538,6 @@
         }
       );
     }
-
 
     return verdict(
       priorCoach.key,
@@ -1731,9 +1578,7 @@
         owner()
       );
 
-
     if (!review.rated) {
-
       if (!summary.seconds) {
         return verdict(
           "start",
@@ -1751,11 +1596,11 @@
           2,
 
           {
-            focus: "session"
+            focus:
+              "session"
           }
         );
       }
-
 
       return verdict(
         "checkin",
@@ -1774,15 +1619,9 @@
       );
     }
 
-
-    /*
-      If the latest result in this monthly view is weak,
-      check practice amount before suggesting a strategy change.
-    */
     const latest =
       review.latest ||
       null;
-
 
     if (
       latest &&
@@ -1793,7 +1632,6 @@
           className,
           latest.weekStart
         );
-
 
       const latestSummary =
         latestRows.length
@@ -1806,7 +1644,6 @@
             latest.snapshot ||
             null
           );
-
 
       if (latestSummary) {
         const dose =
@@ -1823,7 +1660,6 @@
       }
     }
 
-
     const advice =
       review.advice
 
@@ -1833,10 +1669,6 @@
 
         : null;
 
-
-    /*
-      Strong monthly results.
-    */
     if (
       review.verdict ===
       "keep"
@@ -1849,32 +1681,17 @@
           "to keep the current approach."
         ),
 
-        advice
-          ? (
-            advice.text ||
-            advice.action
-          )
+        "Continue the same approach into the next study week.",
 
-          : (
-            "Continue the same approach " +
-            "into the next study week."
-          ),
-
-        stageOf(advice),
+        0,
 
         {
           focus:
-            advice
-              ? advice.focus
-              : "maintain"
+            "maintain"
         }
       );
     }
 
-
-    /*
-      Not enough monthly evidence.
-    */
     if (
       review.verdict ===
       "unknown"
@@ -1895,7 +1712,7 @@
             "to decide what to change."
           ),
 
-        stageOf(advice),
+        0,
 
         {
           focus:
@@ -1906,11 +1723,6 @@
       );
     }
 
-
-    /*
-      Existing monthly coaching:
-      change / test / try.
-    */
     return verdict(
       review.verdict ||
         "test",
@@ -1959,7 +1771,6 @@
 
     let coach;
 
-
     if (
       bounds.kind ===
       "this-week"
@@ -1972,7 +1783,6 @@
           summary
         );
     }
-
 
     else if (
       bounds.kind ===
@@ -1987,7 +1797,6 @@
           ) ||
         null;
 
-
       coach =
         completedWeekCoach(
           className,
@@ -1996,7 +1805,6 @@
           rows
         );
     }
-
 
     else {
       coach =
@@ -2007,7 +1815,6 @@
         );
     }
 
-
     return {
       className,
       bounds,
@@ -2017,11 +1824,11 @@
     };
   }
 
-
-  function classNamesForPeriod(bounds) {
+  function classNamesForPeriod(
+    bounds
+  ) {
     const names =
       new Set();
-
 
     rowsBetween(
       bounds.start,
@@ -2035,14 +1842,6 @@
       }
     });
 
-
-    /*
-      Weekly views keep saved classes
-      visible even with zero activity.
-
-      This allows "ADD A SESSION" to appear
-      instead of silently hiding the class.
-    */
     if (
       bounds.kind ===
         "this-week" ||
@@ -2051,12 +1850,12 @@
     ) {
       savedClasses()
         .forEach(item => {
+
           names.add(
             item.name
           );
         });
     }
-
 
     if (
       bounds.kind ===
@@ -2075,7 +1874,6 @@
           }
         });
     }
-
 
     else if (
       bounds.kind !==
@@ -2103,8 +1901,9 @@
         });
     }
 
-
-    return [...names];
+    return [
+      ...names
+    ];
   }
 
 
@@ -2112,8 +1911,10 @@
   // GRAPH
   // =====================================================
 
-  function graphHtml(summary) {
-    const parts = [
+  function graphParts(
+    summary
+  ) {
+    return [
       {
         css: "learn",
         name: "Learn",
@@ -2157,70 +1958,74 @@
           )
       }
     ];
+  }
 
+  function graphHtml(
+    summary
+  ) {
+    const parts =
+      graphParts(
+        summary
+      );
 
     const total =
       parts.reduce(
         (sum, part) =>
           sum +
           part.seconds,
+
         0
       );
 
-
-    /*
-      THE NUMBERS ABOVE THE GRAPH.
-    */
     const times =
-      parts.map(part =>
+      parts.map(
+        part =>
 
-        '<div class="fp-time fp-' +
-        part.css +
-        '">' +
+          '<div class="fp-time fp-' +
+          part.css +
+          '">' +
 
-          '<strong>' +
-            escapeHtml(
-              human(
-                part.seconds
-              )
-            ) +
-          '</strong>' +
+            '<strong>' +
+              escapeHtml(
+                human(
+                  part.seconds
+                )
+              ) +
+            '</strong>' +
 
-          '<span>' +
-            escapeHtml(
-              part.name
-            ) +
-          '</span>' +
+            '<span>' +
+              escapeHtml(
+                part.name
+              ) +
+            '</span>' +
 
-        '</div>'
+          '</div>'
 
       ).join("");
 
-
-    /*
-      THE BAR ONLY SHOWS PROPORTION.
-    */
     const segments =
       total
 
-        ? parts.map(part =>
+        ? parts.map(
+            part =>
 
-            '<i class="fp-segment fp-' +
-            part.css +
-            '" style="width:' +
+              '<i class="fp-segment fp-' +
+              part.css +
+              '" style="width:' +
 
-            (
-              part.seconds /
-              total *
-              100
-            ).toFixed(3) +
+              (
+                part.seconds /
+                total *
+                100
+              ).toFixed(3) +
 
-            '%"></i>'
+              '%"></i>'
 
           ).join("")
 
-        : '<i class="fp-empty"></i>';
-
+        : (
+          '<i class="fp-empty"></i>'
+        );
 
     const aria =
       parts
@@ -2235,8 +2040,9 @@
               part.seconds
             )
         )
-        .join(", ");
-
+        .join(
+          ", "
+        );
 
     return (
       '<div class="fp-times">' +
@@ -2244,7 +2050,9 @@
       '</div>' +
 
       '<div class="fp-bar" role="img" aria-label="' +
-        escapeHtml(aria) +
+        escapeHtml(
+          aria
+        ) +
       '">' +
 
         segments +
@@ -2255,10 +2063,41 @@
 
 
   // =====================================================
-  // HTML
+  // ACTION BUTTON RULES
   // =====================================================
 
-  function classCardHtml(data) {
+  function shouldShowStartButton(
+    coach
+  ) {
+    if (
+      !coach ||
+      !coach.stage
+    ) {
+      return false;
+    }
+
+    if (
+      coach.key ===
+        "keep" ||
+      coach.key ===
+        "unknown" ||
+      coach.key ===
+        "checkin"
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+
+  // =====================================================
+  // CARD HTML
+  // =====================================================
+
+  function classCardHtml(
+    data
+  ) {
     const {
       className,
       bounds,
@@ -2266,15 +2105,15 @@
       coach
     } = data;
 
-
     const name =
       escapeHtml(
         className
       );
 
-
     const startButton =
-      coach.stage
+      shouldShowStartButton(
+        coach
+      )
 
         ? (
           '<button ' +
@@ -2298,9 +2137,8 @@
 
         : "";
 
-
-    let checkInButton = "";
-
+    let checkInButton =
+      "";
 
     if (
       bounds.kind ===
@@ -2314,7 +2152,6 @@
             record.weekStart ===
             bounds.start
         );
-
 
       checkInButton =
         '<button ' +
@@ -2351,7 +2188,6 @@
 
         '</button>';
     }
-
 
     return (
       '<section class="card fp-class-card">' +
@@ -2433,13 +2269,13 @@
 
           '<button ' +
           'type="button" ' +
-          'class="text-button" ' +
+          'class="secondary" ' +
 
           'data-fp-share="' +
           name +
           '">' +
 
-          'Share / email' +
+          'Share / email progress' +
 
           '</button>' +
 
@@ -2450,8 +2286,9 @@
     );
   }
 
-
-  function headerHtml(bounds) {
+  function headerHtml(
+    bounds
+  ) {
     const tabs =
       Object.entries(
         PERIODS
@@ -2476,7 +2313,7 @@
           'class="' +
           (
             selectedPeriod ===
-            key
+              key
 
               ? "fp-tab-active"
               : ""
@@ -2490,7 +2327,6 @@
           '</button>'
 
       ).join("");
-
 
     return (
       '<section ' +
@@ -2552,7 +2388,6 @@
     );
   }
 
-
   function focusedProgressVisible() {
     return Boolean(
       root.querySelector(
@@ -2561,18 +2396,12 @@
     );
   }
 
-
   function renderFocused() {
     const bounds =
       periodBounds(
         selectedPeriod
       );
 
-
-    /*
-      Classes needing action appear first.
-      Then alphabetical.
-    */
     const cards =
       classNamesForPeriod(
         bounds
@@ -2587,7 +2416,6 @@
 
         .sort(
           (a, b) =>
-
             a.coach.order -
               b.coach.order ||
 
@@ -2596,21 +2424,22 @@
             )
         );
 
-
     displayedCards.clear();
 
+    cards.forEach(
+      card => {
 
-    cards.forEach(card => {
-
-      displayedCards.set(
-        card.className,
-        card
-      );
-    });
-
+        displayedCards.set(
+          card.className,
+          card
+        );
+      }
+    );
 
     root.innerHTML =
-      headerHtml(bounds) +
+      headerHtml(
+        bounds
+      ) +
 
       (
         cards.length
@@ -2630,7 +2459,6 @@
       );
   }
 
-
   function replaceOriginalProgress() {
     if (
       rendering ||
@@ -2639,44 +2467,38 @@
       return;
     }
 
-
-    rendering = true;
-
+    rendering =
+      true;
 
     try {
       renderFocused();
 
     } catch (error) {
-
-      /*
-        FAIL SAFE:
-
-        If this display add-on has a problem,
-        app.js remains the source of truth and
-        the error is not allowed to modify
-        student records.
-      */
-      console.error(error);
+      console.error(
+        error
+      );
 
     } finally {
-      rendering = false;
+      rendering =
+        false;
     }
   }
 
-
   function queueReplacement() {
-    if (renderQueued) {
+    if (
+      renderQueued
+    ) {
       return;
     }
 
-
-    renderQueued = true;
-
+    renderQueued =
+      true;
 
     requestAnimationFrame(
       () => {
 
-        renderQueued = false;
+        renderQueued =
+          false;
 
         if (
           originalProgressVisible()
@@ -2689,28 +2511,703 @@
 
 
   // =====================================================
-  // SHARE / EMAIL
+  // VISUAL SHARE SNAPSHOT
   // =====================================================
 
-  function shareText(data) {
+  function roundRect(
+    context,
+    x,
+    y,
+    width,
+    height,
+    radius
+  ) {
+    const r =
+      Math.min(
+        radius,
+        width / 2,
+        height / 2
+      );
+
+    context.beginPath();
+
+    context.moveTo(
+      x + r,
+      y
+    );
+
+    context.arcTo(
+      x + width,
+      y,
+      x + width,
+      y + height,
+      r
+    );
+
+    context.arcTo(
+      x + width,
+      y + height,
+      x,
+      y + height,
+      r
+    );
+
+    context.arcTo(
+      x,
+      y + height,
+      x,
+      y,
+      r
+    );
+
+    context.arcTo(
+      x,
+      y,
+      x + width,
+      y,
+      r
+    );
+
+    context.closePath();
+  }
+
+  function wrapCanvasText(
+    context,
+    text,
+    x,
+    y,
+    maxWidth,
+    lineHeight,
+    maxLines = 8
+  ) {
+    const words =
+      String(
+        text || ""
+      ).split(
+        /\s+/
+      );
+
+    let line =
+      "";
+
+    let lineNumber =
+      0;
+
+    for (
+      let index = 0;
+      index <
+      words.length;
+      index++
+    ) {
+      const test =
+        line
+          ? (
+            line +
+            " " +
+            words[index]
+          )
+          : words[index];
+
+      const width =
+        context
+          .measureText(
+            test
+          )
+          .width;
+
+      if (
+        width >
+          maxWidth &&
+        line
+      ) {
+        context.fillText(
+          line,
+          x,
+          y +
+          (
+            lineNumber *
+            lineHeight
+          )
+        );
+
+        line =
+          words[index];
+
+        lineNumber++;
+
+        if (
+          lineNumber >=
+          maxLines
+        ) {
+          break;
+        }
+
+      } else {
+        line =
+          test;
+      }
+    }
+
+    if (
+      line &&
+      lineNumber <
+        maxLines
+    ) {
+      context.fillText(
+        line,
+        x,
+        y +
+        (
+          lineNumber *
+          lineHeight
+        )
+      );
+
+      lineNumber++;
+    }
+
+    return (
+      lineNumber *
+      lineHeight
+    );
+  }
+
+  function snapshotColors() {
+    return {
+      background: "#f5f8fb",
+      card: "#ffffff",
+      dark: "#17344d",
+      muted: "#647485",
+      border: "#d8e2e9",
+      learn: "#2a78d6",
+      retrieval: "#eb6834",
+      crosscheck: "#6250d6",
+      assess: "#1b8f72",
+      keep: "#eef8f3",
+      test: "#eef4fb",
+      change: "#fff4e8",
+      add: "#f5f1ff",
+      neutral: "#f4f6f8"
+    };
+  }
+
+  function snapshotToneColor(
+    coach,
+    colors
+  ) {
+    if (
+      coach.tone ===
+      "keep"
+    ) {
+      return colors.keep;
+    }
+
+    if (
+      coach.tone ===
+      "test"
+    ) {
+      return colors.test;
+    }
+
+    if (
+      coach.tone ===
+      "change"
+    ) {
+      return colors.change;
+    }
+
+    if (
+      coach.tone ===
+      "add"
+    ) {
+      return colors.add;
+    }
+
+    return colors.neutral;
+  }
+
+  function canvasToBlob(
+    canvas
+  ) {
+    return new Promise(
+      (resolve, reject) => {
+
+        canvas.toBlob(
+          blob => {
+
+            if (blob) {
+              resolve(blob);
+
+            } else {
+              reject(
+                new Error(
+                  "The progress image could not be created."
+                )
+              );
+            }
+          },
+
+          "image/png"
+        );
+      }
+    );
+  }
+
+  async function createProgressSnapshot(
+    data
+  ) {
+    const colors =
+      snapshotColors();
+
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+    canvas.width =
+      1200;
+
+    canvas.height =
+      1180;
+
+    const context =
+      canvas.getContext(
+        "2d"
+      );
+
+    if (!context) {
+      throw new Error(
+        "This browser cannot create the progress image."
+      );
+    }
+
+    context.fillStyle =
+      colors.background;
+
+    context.fillRect(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    context.fillStyle =
+      colors.card;
+
+    roundRect(
+      context,
+      70,
+      60,
+      1060,
+      1060,
+      34
+    );
+
+    context.fill();
+
+    context.strokeStyle =
+      colors.border;
+
+    context.lineWidth =
+      2;
+
+    context.stroke();
+
+    const left =
+      130;
+
+    const right =
+      1070;
+
+    context.fillStyle =
+      colors.muted;
+
+    context.font =
+      "700 28px Arial, sans-serif";
+
+    context.fillText(
+      "STUDY SYSTEM",
+      left,
+      130
+    );
+
+    context.fillStyle =
+      colors.dark;
+
+    context.font =
+      "700 54px Arial, sans-serif";
+
+    context.fillText(
+      data.className,
+      left,
+      200
+    );
+
+    context.fillStyle =
+      colors.dark;
+
+    context.font =
+      "700 31px Arial, sans-serif";
+
+    context.fillText(
+      data.bounds.title,
+      left,
+      255
+    );
+
+    context.fillStyle =
+      colors.muted;
+
+    context.font =
+      "400 27px Arial, sans-serif";
+
+    context.fillText(
+      data.bounds.dates,
+      left,
+      296
+    );
+
+    context.textAlign =
+      "right";
+
+    context.fillStyle =
+      colors.muted;
+
+    context.font =
+      "700 22px Arial, sans-serif";
+
+    context.fillText(
+      "TOTAL STUDY TIME",
+      right,
+      150
+    );
+
+    context.fillStyle =
+      colors.dark;
+
+    context.font =
+      "700 43px Arial, sans-serif";
+
+    context.fillText(
+      human(
+        data.summary.seconds
+      ),
+      right,
+      205
+    );
+
+    context.textAlign =
+      "left";
+
+    const parts =
+      graphParts(
+        data.summary
+      );
+
+    const usableWidth =
+      right -
+      left;
+
+    const columnWidth =
+      usableWidth /
+      4;
+
+    const stageColors = [
+      colors.learn,
+      colors.retrieval,
+      colors.crosscheck,
+      colors.assess
+    ];
+
+    parts.forEach(
+      (part, index) => {
+
+        const center =
+          left +
+          (
+            columnWidth *
+            index
+          ) +
+          (
+            columnWidth /
+            2
+          );
+
+        context.textAlign =
+          "center";
+
+        context.fillStyle =
+          stageColors[
+            index
+          ];
+
+        context.font =
+          "700 32px Arial, sans-serif";
+
+        context.fillText(
+          human(
+            part.seconds
+          ),
+          center,
+          385
+        );
+
+        context.fillStyle =
+          colors.muted;
+
+        context.font =
+          "700 22px Arial, sans-serif";
+
+        context.fillText(
+          part.name,
+          center,
+          423
+        );
+      }
+    );
+
+    context.textAlign =
+      "left";
+
+    const barX =
+      left;
+
+    const barY =
+      458;
+
+    const barWidth =
+      usableWidth;
+
+    const barHeight =
+      32;
+
+    roundRect(
+      context,
+      barX,
+      barY,
+      barWidth,
+      barHeight,
+      16
+    );
+
+    context.save();
+
+    context.clip();
+
+    context.fillStyle =
+      "#e6edf2";
+
+    context.fillRect(
+      barX,
+      barY,
+      barWidth,
+      barHeight
+    );
+
+    const graphTotal =
+      parts.reduce(
+        (sum, part) =>
+          sum +
+          part.seconds,
+        0
+      );
+
+    if (
+      graphTotal >
+      0
+    ) {
+      let cursor =
+        barX;
+
+      parts.forEach(
+        (part, index) => {
+
+          const width =
+            barWidth *
+            (
+              part.seconds /
+              graphTotal
+            );
+
+          context.fillStyle =
+            stageColors[
+              index
+            ];
+
+          context.fillRect(
+            cursor,
+            barY,
+            width,
+            barHeight
+          );
+
+          cursor +=
+            width;
+        }
+      );
+    }
+
+    context.restore();
+
+    const coachY =
+      555;
+
+    const coachHeight =
+      430;
+
+    context.fillStyle =
+      snapshotToneColor(
+        data.coach,
+        colors
+      );
+
+    roundRect(
+      context,
+      left,
+      coachY,
+      usableWidth,
+      coachHeight,
+      26
+    );
+
+    context.fill();
+
+    context.fillStyle =
+      colors.dark;
+
+    context.font =
+      "800 27px Arial, sans-serif";
+
+    context.fillText(
+      data.coach.label,
+      left + 40,
+      coachY + 60
+    );
+
+    context.font =
+      "400 30px Arial, sans-serif";
+
+    const interpretationHeight =
+      wrapCanvasText(
+        context,
+        data.coach.interpretation,
+        left + 40,
+        coachY + 120,
+        usableWidth - 80,
+        42,
+        5
+      );
+
+    const nextY =
+      coachY +
+      145 +
+      interpretationHeight;
+
+    context.font =
+      "700 29px Arial, sans-serif";
+
+    context.fillText(
+      "Next:",
+      left + 40,
+      nextY
+    );
+
+    context.font =
+      "400 29px Arial, sans-serif";
+
+    wrapCanvasText(
+      context,
+      data.coach.next,
+      left + 40,
+      nextY + 45,
+      usableWidth - 80,
+      41,
+      5
+    );
+
+    context.fillStyle =
+      colors.muted;
+
+    context.font =
+      "400 22px Arial, sans-serif";
+
+    context.fillText(
+      "Learn → Retrieval → Crosscheck → Assess",
+      left,
+      1050
+    );
+
+    context.textAlign =
+      "right";
+
+    context.fillText(
+      "Study System",
+      right,
+      1050
+    );
+
+    context.textAlign =
+      "left";
+
+    const blob =
+      await canvasToBlob(
+        canvas
+      );
+
+    const filename =
+      (
+        "study-system-" +
+        safeFilename(
+          data.className
+        ) +
+        "-" +
+        safeFilename(
+          data.bounds.title
+        ) +
+        ".png"
+      );
+
+    return new File(
+      [blob],
+      filename,
+      {
+        type:
+          "image/png"
+      }
+    );
+  }
+
+
+  // =====================================================
+  // SHARE TEXT
+  // =====================================================
+
+  function shareText(
+    data
+  ) {
     const summary =
       data.summary;
 
-
     return [
-      "Study System Progress — " +
-        data.className,
+      (
+        "Study System Progress — " +
+        data.className
+      ),
 
-      data.bounds.title +
+      (
+        data.bounds.title +
         " · " +
-        data.bounds.dates,
+        data.bounds.dates
+      ),
 
       "",
 
-      "Total: " +
+      (
+        "Total: " +
         human(
           summary.seconds
-        ),
+        )
+      ),
 
       (
         "Learn " +
@@ -2751,12 +3248,43 @@
 
       data.coach.interpretation,
 
-      "Next: " +
+      (
+        "Next: " +
         data.coach.next
+      )
 
     ].join("\n");
   }
 
+  function emailSummary(
+    data
+  ) {
+    const title =
+      (
+        "Study System Progress — " +
+        data.className
+      );
+
+    const text =
+      shareText(
+        data
+      );
+
+    window.location.href =
+      "mailto:?subject=" +
+      encodeURIComponent(
+        title
+      ) +
+      "&body=" +
+      encodeURIComponent(
+        text
+      );
+  }
+
+
+  // =====================================================
+  // SHARE / EMAIL
+  // =====================================================
 
   async function shareProgress(
     className
@@ -2770,20 +3298,89 @@
       return;
     }
 
-
     const title =
-      "Study System Progress — " +
-      className;
-
+      (
+        "Study System Progress — " +
+        className
+      );
 
     const text =
-      shareText(data);
+      shareText(
+        data
+      );
 
+    const message =
+      document.getElementById(
+        "message"
+      );
 
-    /*
-      iPhone / iPad / compatible browser:
-      use the normal operating-system Share sheet.
-    */
+    if (message) {
+      message.textContent =
+        "Creating progress snapshot…";
+    }
+
+    let imageFile =
+      null;
+
+    try {
+      imageFile =
+        await createProgressSnapshot(
+          data
+        );
+
+    } catch (error) {
+      console.error(
+        error
+      );
+    }
+
+    if (
+      imageFile &&
+      typeof navigator.share ===
+        "function" &&
+      typeof navigator.canShare ===
+        "function"
+    ) {
+      const files = [
+        imageFile
+      ];
+
+      if (
+        navigator.canShare({
+          files
+        })
+      ) {
+        try {
+          await navigator.share({
+            title,
+            text,
+            files
+          });
+
+          if (message) {
+            message.textContent =
+              "";
+          }
+
+          return;
+
+        } catch (error) {
+          if (
+            error &&
+            error.name ===
+              "AbortError"
+          ) {
+            if (message) {
+              message.textContent =
+                "";
+            }
+
+            return;
+          }
+        }
+      }
+    }
+
     if (
       typeof navigator.share ===
       "function"
@@ -2794,32 +3391,37 @@
           text
         });
 
+        if (message) {
+          message.textContent =
+            "";
+        }
+
         return;
 
       } catch (error) {
-
         if (
           error &&
           error.name ===
             "AbortError"
         ) {
+          if (message) {
+            message.textContent =
+              "";
+          }
+
           return;
         }
       }
     }
 
+    if (message) {
+      message.textContent =
+        "Opening your email with the progress summary…";
+    }
 
-    /*
-      Chromebook / desktop fallback:
-      open the student's email application
-      with the progress already written.
-    */
-    window.location.href =
-      "mailto:?subject=" +
-      encodeURIComponent(title) +
-
-      "&body=" +
-      encodeURIComponent(text);
+    emailSummary(
+      data
+    );
   }
 
 
@@ -2836,13 +3438,11 @@
           "[data-fp-period]"
         );
 
-
       if (tab) {
         event.preventDefault();
 
         selectedPeriod =
           tab.dataset.fpPeriod;
-
 
         if (
           focusedProgressVisible()
@@ -2851,19 +3451,19 @@
             renderFocused();
 
           } catch (error) {
-            console.error(error);
+            console.error(
+              error
+            );
           }
         }
 
         return;
       }
 
-
       const share =
         event.target.closest(
           "[data-fp-share]"
         );
-
 
       if (share) {
         event.preventDefault();
@@ -2889,16 +3489,13 @@
       return;
     }
 
-
     const style =
       document.createElement(
         "style"
       );
 
-
     style.id =
       "focusedProgressStyles";
-
 
     style.textContent = `
       :root {
@@ -2906,12 +3503,10 @@
         --fp-retrieval: #eb6834;
         --fp-crosscheck: #6250d6;
         --fp-assess: #1b8f72;
-
         --fp-track: #e6edf2;
         --fp-dark: #17344d;
         --fp-muted: #647485;
         --fp-border: #d8e2e9;
-
         --fp-keep: #eef8f3;
         --fp-test: #eef4fb;
         --fp-change: #fff4e8;
@@ -2919,321 +3514,240 @@
         --fp-neutral: #f4f6f8;
       }
 
-
       .fp-intro {
         max-width: 42rem;
         margin-bottom: 1rem;
       }
 
-
       .fp-tabs {
         display: grid;
-
         grid-template-columns:
           repeat(
             4,
             minmax(0, 1fr)
           );
-
         gap: .45rem;
         margin: 1rem 0 .7rem;
       }
 
-
       .fp-tabs button {
         min-height: 2.7rem;
         padding: .55rem .4rem;
-
         border:
           1px solid
           var(--fp-border);
-
         border-radius: .75rem;
-
         background: #fff;
         color: var(--fp-dark);
-
         font: inherit;
         font-weight: 750;
-
         cursor: pointer;
       }
-
 
       .fp-tabs button.fp-tab-active {
         background:
           var(--fp-dark);
-
         border-color:
           var(--fp-dark);
-
         color: #fff;
       }
-
 
       .fp-period {
         margin: .6rem 0 0;
       }
 
-
       .fp-card-head {
         display: flex;
-
         justify-content:
           space-between;
-
         align-items:
           flex-start;
-
         gap: 1rem;
         margin-bottom: 1rem;
       }
-
 
       .fp-card-head h2 {
         margin: 0 0 .15rem;
       }
 
-
       .fp-dates {
         margin: 0;
       }
-
 
       .fp-total {
         flex: 0 0 auto;
         text-align: right;
       }
 
-
       .fp-total span {
         display: block;
-
         color:
           var(--fp-muted);
-
         font-size: .72rem;
         font-weight: 800;
-
         letter-spacing: .06em;
         text-transform: uppercase;
       }
 
-
       .fp-total strong {
         display: block;
-
         margin-top: .1rem;
-
         color:
           var(--fp-dark);
-
         font-size: 1.15rem;
       }
 
-
-      /*
-        ACTUAL TIME ABOVE THE BAR.
-
-        Students do not need to estimate
-        minutes from the graph.
-      */
       .fp-times {
         display: grid;
-
         grid-template-columns:
           repeat(
             4,
             minmax(0, 1fr)
           );
-
         gap: .35rem;
         margin: .25rem 0 .5rem;
       }
-
 
       .fp-time {
         min-width: 0;
         text-align: center;
       }
 
-
       .fp-time strong {
         display: block;
-
         font-size: 1rem;
         line-height: 1.15;
       }
 
-
       .fp-time span {
         display: block;
-
         margin-top: .18rem;
-
         color:
           var(--fp-muted);
-
         font-size: .72rem;
         font-weight: 750;
         line-height: 1.15;
       }
-
 
       .fp-time.fp-learn strong {
         color:
           var(--fp-learn);
       }
 
-
       .fp-time.fp-retrieval strong {
         color:
           var(--fp-retrieval);
       }
-
 
       .fp-time.fp-crosscheck strong {
         color:
           var(--fp-crosscheck);
       }
 
-
       .fp-time.fp-assess strong {
         color:
           var(--fp-assess);
       }
 
-
-      /*
-        THE BAR SHOWS ALLOCATION ONLY.
-      */
       .fp-bar {
         display: flex;
-
         width: 100%;
         height: 1.15rem;
-
         overflow: hidden;
-
         margin-bottom: 1rem;
-
         border-radius: 999px;
-
         background:
           var(--fp-track);
       }
-
 
       .fp-segment {
         display: block;
         height: 100%;
       }
 
-
       .fp-segment.fp-learn {
         background:
           var(--fp-learn);
       }
-
 
       .fp-segment.fp-retrieval {
         background:
           var(--fp-retrieval);
       }
 
-
       .fp-segment.fp-crosscheck {
         background:
           var(--fp-crosscheck);
       }
-
 
       .fp-segment.fp-assess {
         background:
           var(--fp-assess);
       }
 
-
       .fp-empty {
         width: 100%;
         height: 100%;
-
         background:
           var(--fp-track);
       }
 
-
       .fp-coach {
         padding: 1rem 1rem .95rem;
-
         border:
           1px solid
           var(--fp-border);
-
         border-radius: .9rem;
       }
-
 
       .fp-coach p {
         margin: .45rem 0 0;
       }
 
-
       .fp-verdict {
         display: inline-block;
-
         font-size: .78rem;
         font-weight: 900;
-
         letter-spacing: .055em;
       }
-
 
       .fp-next {
         color:
           var(--fp-dark);
       }
 
-
       .fp-keep {
         background:
           var(--fp-keep);
       }
-
 
       .fp-test {
         background:
           var(--fp-test);
       }
 
-
       .fp-change {
         background:
           var(--fp-change);
       }
-
 
       .fp-add {
         background:
           var(--fp-add);
       }
 
-
       .fp-neutral {
         background:
           var(--fp-neutral);
       }
 
-
       .fp-actions {
         margin-top: .9rem;
       }
 
-
       @media (
         max-width: 560px
       ) {
-
         .fp-tabs {
           grid-template-columns:
             repeat(
@@ -3242,38 +3756,31 @@
             );
         }
 
-
         .fp-times {
           gap: .2rem;
         }
 
-
         .fp-time strong {
           font-size: .88rem;
         }
-
 
         .fp-time span {
           font-size: .64rem;
         }
       }
 
-
       @media (
         max-width: 370px
       ) {
-
         .fp-time strong {
           font-size: .8rem;
         }
-
 
         .fp-time span {
           font-size: .59rem;
         }
       }
     `;
-
 
     document.head.appendChild(
       style
@@ -3282,11 +3789,10 @@
 
 
   // =====================================================
-  // WATCH THE EXISTING APP
+  // WATCH EXISTING APP
   // =====================================================
 
   installStyles();
-
 
   new MutationObserver(
     queueReplacement
@@ -3298,16 +3804,10 @@
     }
   );
 
-
-  /*
-    Add the Progress build number to the
-    existing app footer after app.js writes it.
-  */
   const version =
     document.getElementById(
       "coachVersion"
     );
-
 
   function stampVersion() {
     if (
@@ -3325,7 +3825,6 @@
     }
   }
 
-
   if (version) {
     new MutationObserver(
       stampVersion
@@ -3341,11 +3840,6 @@
     stampVersion();
   }
 
-
-  /*
-    If Progress was already drawn before
-    this file finished loading, replace it.
-  */
   queueReplacement();
 
 })();
