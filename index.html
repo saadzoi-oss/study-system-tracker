@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 
@@ -19,6 +20,206 @@
   <link
     rel="stylesheet"
     href="styles.css?v=coach-20261006-2">
+
+  <!--
+    PROGRESS PRESENTATION ONLY — 2026-10-17
+    Keeps existing Progress, Weekly Rhythm, and Coaching Consistency logic.
+    Changes only the visual order, spacing, and week disclosure.
+    No storage, sync, recovery, assessment, or coaching changes.
+  -->
+  <style>
+    /* Only apply to the existing focused Progress cards. */
+    #appRoot .fp-class-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 1.05rem 1.2rem;
+    }
+
+    /* A. Class, selected date range, and total time. */
+    #appRoot .fp-class-card > .fp-card-head {
+      order: 0;
+      gap: .8rem;
+      margin-bottom: .7rem;
+    }
+
+    #appRoot .fp-class-card .fp-card-head h2 {
+      font-size: clamp(1.08rem, 3vw, 1.3rem);
+      overflow-wrap: anywhere;
+    }
+
+    #appRoot .fp-class-card .ss-timeframe {
+      display: inline;
+      color: #475f73;
+      font-size: .84rem;
+      font-weight: 750;
+    }
+
+    #appRoot .fp-class-card .fp-dates {
+      display: inline;
+    }
+
+    /* B. Verdict and interpretation come before the stage bar. */
+    #appRoot .fp-class-card > .fp-coach {
+      order: 1;
+      padding: .8rem .95rem;
+    }
+
+    #appRoot .fp-class-card .fp-verdict {
+      font-size: .82rem;
+      line-height: 1.35;
+    }
+
+    #appRoot .fp-class-card .fp-coach p {
+      line-height: 1.45;
+      margin-top: .35rem;
+    }
+
+    /* C. Keep the same calculated next step, but make it easy to scan. */
+    #appRoot .fp-class-card .fp-coach .fp-next {
+      margin-top: .65rem;
+      padding: .6rem .75rem;
+      background: rgba(255, 255, 255, .78);
+      border-radius: .55rem;
+      line-height: 1.4;
+    }
+
+    /*
+      Keep the original action container in the DOM: coaching-consistency.js
+      uses it to add/remove Start this step, and sharing uses its buttons.
+      display: contents changes visual placement only, not the selectors.
+    */
+    #appRoot .fp-class-card > .fp-actions {
+      display: contents;
+    }
+
+    #appRoot .fp-class-card > .fp-actions > [data-reflection-class],
+    #appRoot .fp-class-card > .fp-actions > [data-coach-class] {
+      order: 2;
+      align-self: flex-start;
+      min-height: 2.4rem;
+      max-width: 100%;
+      margin: .6rem 0 0;
+      padding: .5rem .8rem;
+      white-space: normal;
+      text-align: left;
+    }
+
+    /* D. Actual stage time remains visible ABOVE the existing bar. */
+    #appRoot .fp-class-card > .fp-times {
+      order: 3;
+      margin: .95rem 0 .4rem;
+    }
+
+    #appRoot .fp-class-card > .fp-times::before {
+      content: "STAGE ALLOCATION";
+      grid-column: 1 / -1;
+      display: block;
+      margin-bottom: .12rem;
+      font-size: .75rem;
+      font-weight: 850;
+      letter-spacing: .045em;
+      color: #34536b;
+    }
+
+    #appRoot .fp-class-card > .fp-bar {
+      order: 4;
+      height: .95rem;
+      margin: 0 0 .2rem;
+    }
+
+    /* E. Existing rhythm counts stay visible; seven days are optional. */
+    #appRoot .fp-class-card > .sr-rhythm {
+      order: 5;
+      padding: .7rem .85rem;
+      margin: .6rem 0 .3rem;
+    }
+
+    #appRoot .fp-class-card > .sr-rhythm > .sr-title {
+      margin-bottom: .15rem;
+    }
+
+    #appRoot .fp-class-card > .sr-rhythm > .sr-counts {
+      margin: .25rem 0 0;
+      font-size: .84rem;
+      line-height: 1.45;
+    }
+
+    #appRoot .fp-class-card .ss-week-details {
+      margin-top: .5rem;
+      padding-top: .45rem;
+      border-top: 1px solid #e4ebf0;
+    }
+
+    #appRoot .fp-class-card .ss-week-details > summary {
+      width: fit-content;
+      padding: .25rem 0;
+      color: #245e9a;
+      cursor: pointer;
+      font-size: .85rem;
+      font-weight: 750;
+    }
+
+    #appRoot .fp-class-card .ss-week-details > summary:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 3px;
+      border-radius: .2rem;
+    }
+
+    #appRoot .fp-class-card .ss-week-details > .sr-days {
+      margin-top: .7rem;
+    }
+
+    /* G. Sharing stays available at the bottom of every class card. */
+    #appRoot .fp-class-card > .fp-actions > [data-fp-share] {
+      order: 6;
+      align-self: flex-start;
+      max-width: 100%;
+      min-height: 2.35rem;
+      margin: .55rem 0 0;
+      padding: .48rem .8rem;
+      white-space: normal;
+      text-align: left;
+    }
+
+    /* Tighter timeframe selector, without changing selected periods. */
+    #appRoot .fp-header .fp-intro {
+      margin-bottom: .35rem;
+    }
+
+    #appRoot .fp-header .fp-tabs {
+      margin: .65rem 0 .5rem;
+    }
+
+    @media (max-width: 560px) {
+      #appRoot .fp-class-card {
+        padding: .9rem .85rem;
+      }
+
+      #appRoot .fp-class-card > .fp-coach {
+        padding: .75rem .8rem;
+      }
+
+      #appRoot .fp-class-card .fp-total strong {
+        font-size: 1.05rem;
+      }
+
+      #appRoot .fp-class-card > .fp-times {
+        gap: .2rem;
+      }
+
+      #appRoot .fp-class-card .fp-time span {
+        overflow-wrap: anywhere;
+      }
+
+      #appRoot .fp-class-card > .fp-actions > [data-reflection-class],
+      #appRoot .fp-class-card > .fp-actions > [data-coach-class],
+      #appRoot .fp-class-card > .fp-actions > [data-fp-share] {
+        width: 100%;
+        align-self: stretch;
+      }
+    }
+  </style>
 </head>
 
 <body>
@@ -32,7 +233,6 @@
         aria-hidden="true">
         S
       </span>
-
       <div>
         <span class="eyebrow">
           STUDY SYSTEM
@@ -67,7 +267,6 @@
       </p>
 
     </section>
-
   </main>
 
 
@@ -107,7 +306,6 @@
     or changing devices.
 
     <br>
-
     <span id="coachVersion">
       Loading coaching version…
     </span>
@@ -140,7 +338,6 @@
     src="config.js?v=coach-20261006-2">
   </script>
 
-
   <!-- EXISTING STUDY SYSTEM -->
   <script
     src="app.js?v=stable-code-20261013-2">
@@ -162,6 +359,80 @@
   <!-- COACHING CONSISTENCY FIX -->
   <script
     src="coaching-consistency.js?v=coaching-consistency-20261017-1">
+  </script>
+
+  <!--
+    PRESENTATION ONLY: native, keyboard-accessible disclosure for the
+    existing seven-day grid. The weekly-rhythm.js counts and records
+    remain untouched. This does not save, change, or calculate data.
+  -->
+  <script>
+    (() => {
+      "use strict";
+
+      const root = document.getElementById("appRoot");
+      if (!root || typeof MutationObserver === "undefined") return;
+
+      function showSelectedTimeframe() {
+        const period = root.querySelector(
+          '.fp-header [data-fp-period][aria-selected="true"]'
+        )?.textContent.trim();
+
+        if (!period) return;
+
+        root.querySelectorAll(
+          ".fp-class-card .fp-dates"
+        ).forEach(dates => {
+          if (dates.parentElement.querySelector(".ss-timeframe")) return;
+
+          const label = document.createElement("span");
+          label.className = "ss-timeframe";
+          label.textContent = period + " · ";
+          // Do not edit fp-dates: existing sharing reads that exact text.
+          dates.before(label);
+        });
+      }
+
+      function makeWeeklyDetails() {
+        root.querySelectorAll(
+          ".fp-class-card .sr-rhythm"
+        ).forEach(section => {
+          // Only upgrade the original direct child, exactly once.
+          const grid = section.querySelector(":scope > .sr-days");
+          if (!grid) return;
+
+          const details = document.createElement("details");
+          details.className = "ss-week-details";
+
+          const toggle = document.createElement("summary");
+          toggle.textContent = "See my week";
+
+          details.append(toggle, grid);
+          // The original sr-counts remains ABOVE the disclosure.
+          section.appendChild(details);
+        });
+      }
+
+      let queued = false;
+      const observer = new MutationObserver(() => {
+        if (queued) return;
+        queued = true;
+
+        requestAnimationFrame(() => {
+          queued = false;
+          showSelectedTimeframe();
+          makeWeeklyDetails();
+        });
+      });
+
+      observer.observe(root, {
+        childList: true,
+        subtree: true
+      });
+
+      showSelectedTimeframe();
+      makeWeeklyDetails();
+    })();
   </script>
 
 </body>
