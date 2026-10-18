@@ -1,439 +1,225 @@
 
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta charset="utf-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1">
-
-  <meta
-    name="color-scheme"
-    content="light">
-
-  <title>
-    Study System • Study Coach
-  </title>
-
-  <link
-    rel="stylesheet"
-    href="styles.css?v=coach-20261006-2">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Study System • Study Coach</title>
+  <link rel="stylesheet" href="styles.css?v=coach-20261006-2">
 
   <!--
-    PROGRESS PRESENTATION ONLY — 2026-10-17
-    Keeps existing Progress, Weekly Rhythm, and Coaching Consistency logic.
-    Changes only the visual order, spacing, and week disclosure.
-    No storage, sync, recovery, assessment, or coaching changes.
+    STUDY COACH — COACHING VIEW LAYOUT
+    Presentation-only: no JavaScript added.
+    No changes to data, coaching decisions, syncing, or sharing.
+    Original Progress, rhythm, and consistency scripts stay loaded.
   -->
   <style>
-    /* Only apply to the existing focused Progress cards. */
+    /* Keep the important information in the first screenful. */
     #appRoot .fp-class-card {
       display: flex;
       flex-direction: column;
       gap: 0;
-      padding: 1.05rem 1.2rem;
+      padding: 1rem 1.1rem;
     }
 
-    /* A. Class, selected date range, and total time. */
+    /* 1 — Class and total recorded study time. */
     #appRoot .fp-class-card > .fp-card-head {
       order: 0;
-      gap: .8rem;
-      margin-bottom: .7rem;
+      align-items: flex-start;
+      margin: 0 0 .65rem;
     }
 
     #appRoot .fp-class-card .fp-card-head h2 {
-      font-size: clamp(1.08rem, 3vw, 1.3rem);
+      margin: 0 0 .12rem;
       overflow-wrap: anywhere;
     }
 
-    #appRoot .fp-class-card .ss-timeframe {
-      display: inline;
-      color: #475f73;
-      font-size: .84rem;
-      font-weight: 750;
-    }
-
-    #appRoot .fp-class-card .fp-dates {
-      display: inline;
-    }
-
-    /* B. Verdict and interpretation come before the stage bar. */
+    /* 2 — The existing recommendation, with no new coaching rules. */
     #appRoot .fp-class-card > .fp-coach {
       order: 1;
-      padding: .8rem .95rem;
+      margin: 0;
+      padding: .8rem .9rem;
     }
 
     #appRoot .fp-class-card .fp-verdict {
-      font-size: .82rem;
-      line-height: 1.35;
+      line-height: 1.45;
     }
 
     #appRoot .fp-class-card .fp-coach p {
       line-height: 1.45;
-      margin-top: .35rem;
+      margin: .35rem 0 0;
     }
 
-    /* C. Keep the same calculated next step, but make it easy to scan. */
-    #appRoot .fp-class-card .fp-coach .fp-next {
-      margin-top: .65rem;
-      padding: .6rem .75rem;
-      background: rgba(255, 255, 255, .78);
-      border-radius: .55rem;
-      line-height: 1.4;
+    #appRoot .fp-class-card .fp-next {
+      margin-top: .6rem;
     }
 
     /*
-      Keep the original action container in the DOM: coaching-consistency.js
-      uses it to add/remove Start this step, and sharing uses its buttons.
-      display: contents changes visual placement only, not the selectors.
+      The original action container stays in the DOM for app.js,
+      coaching-consistency.js, and the existing share handler.
+      Only its children's visual positions change.
     */
     #appRoot .fp-class-card > .fp-actions {
       display: contents;
     }
 
-    #appRoot .fp-class-card > .fp-actions > [data-reflection-class],
-    #appRoot .fp-class-card > .fp-actions > [data-coach-class] {
+    /* 3 — Check-in and Start this step stay directly after advice. */
+    #appRoot .fp-class-card > .fp-actions > button:not([data-fp-share]) {
       order: 2;
       align-self: flex-start;
-      min-height: 2.4rem;
       max-width: 100%;
-      margin: .6rem 0 0;
-      padding: .5rem .8rem;
+      min-height: 2.4rem;
+      margin: .55rem .45rem 0 0;
       white-space: normal;
       text-align: left;
     }
 
-    /* D. Actual stage time remains visible ABOVE the existing bar. */
+    /* 4 — Actual times, then the existing colored allocation bar. */
     #appRoot .fp-class-card > .fp-times {
       order: 3;
       margin: .95rem 0 .4rem;
     }
 
     #appRoot .fp-class-card > .fp-times::before {
-      content: "STAGE ALLOCATION";
-      grid-column: 1 / -1;
+      content: "RECORDED TIME BY STAGE";
       display: block;
-      margin-bottom: .12rem;
-      font-size: .75rem;
-      font-weight: 850;
-      letter-spacing: .045em;
+      grid-column: 1 / -1;
+      margin-bottom: .2rem;
       color: #34536b;
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .045em;
     }
 
     #appRoot .fp-class-card > .fp-bar {
       order: 4;
-      height: .95rem;
-      margin: 0 0 .2rem;
+      margin: 0 0 .25rem;
     }
 
-    /* E. Existing rhythm counts stay visible; seven days are optional. */
+    /* 5 — Weekly pattern stays compact. Keep all seven days visible. */
     #appRoot .fp-class-card > .sr-rhythm {
       order: 5;
-      padding: .7rem .85rem;
-      margin: .6rem 0 .3rem;
+      display: flex;
+      flex-direction: column;
+      margin: .55rem 0 0;
+      padding: .7rem .75rem;
     }
 
-    #appRoot .fp-class-card > .sr-rhythm > .sr-title {
-      margin-bottom: .15rem;
+    #appRoot .fp-class-card .sr-title {
+      order: 0;
+      margin: 0 0 .22rem;
     }
 
-    #appRoot .fp-class-card > .sr-rhythm > .sr-counts {
-      margin: .25rem 0 0;
-      font-size: .84rem;
-      line-height: 1.45;
+    #appRoot .fp-class-card .sr-counts {
+      order: 1;
+      margin: 0 0 .45rem;
+      line-height: 1.5;
+      font-size: .82rem;
     }
 
-    #appRoot .fp-class-card .ss-week-details {
-      margin-top: .5rem;
-      padding-top: .45rem;
-      border-top: 1px solid #e4ebf0;
+    #appRoot .fp-class-card .sr-days {
+      order: 2;
+      margin: 0;
+      gap: .15rem;
     }
 
-    #appRoot .fp-class-card .ss-week-details > summary {
-      width: fit-content;
-      padding: .25rem 0;
-      color: #245e9a;
-      cursor: pointer;
-      font-size: .85rem;
-      font-weight: 750;
+    #appRoot .fp-class-card .sr-dot {
+      margin: .24rem auto;
     }
 
-    #appRoot .fp-class-card .ss-week-details > summary:focus-visible {
-      outline: 2px solid #2563eb;
-      outline-offset: 3px;
-      border-radius: .2rem;
+    #appRoot .fp-class-card .sr-detail {
+      min-height: 0;
     }
 
-    #appRoot .fp-class-card .ss-week-details > .sr-days {
-      margin-top: .7rem;
-    }
-
-    /* G. Sharing stays available at the bottom of every class card. */
+    /* 6 — Sharing is available, but not required for teacher review. */
     #appRoot .fp-class-card > .fp-actions > [data-fp-share] {
       order: 6;
       align-self: flex-start;
       max-width: 100%;
-      min-height: 2.35rem;
-      margin: .55rem 0 0;
-      padding: .48rem .8rem;
+      min-height: 2.4rem;
+      margin: .6rem 0 0;
       white-space: normal;
-      text-align: left;
-    }
-
-    /* Tighter timeframe selector, without changing selected periods. */
-    #appRoot .fp-header .fp-intro {
-      margin-bottom: .35rem;
-    }
-
-    #appRoot .fp-header .fp-tabs {
-      margin: .65rem 0 .5rem;
     }
 
     @media (max-width: 560px) {
       #appRoot .fp-class-card {
-        padding: .9rem .85rem;
+        padding: .88rem .8rem;
       }
 
       #appRoot .fp-class-card > .fp-coach {
         padding: .75rem .8rem;
       }
 
-      #appRoot .fp-class-card .fp-total strong {
-        font-size: 1.05rem;
-      }
-
       #appRoot .fp-class-card > .fp-times {
         gap: .2rem;
       }
 
-      #appRoot .fp-class-card .fp-time span {
-        overflow-wrap: anywhere;
+      #appRoot .fp-class-card > .fp-actions > button:not([data-fp-share]) {
+        align-self: stretch;
+        width: 100%;
+        margin-right: 0;
       }
 
-      #appRoot .fp-class-card > .fp-actions > [data-reflection-class],
-      #appRoot .fp-class-card > .fp-actions > [data-coach-class],
       #appRoot .fp-class-card > .fp-actions > [data-fp-share] {
-        width: 100%;
         align-self: stretch;
+        width: 100%;
       }
     }
   </style>
 </head>
 
 <body>
-
   <header class="masthead">
-
     <div class="brand">
-
-      <span
-        class="logo"
-        aria-hidden="true">
-        S
-      </span>
+      <span class="logo" aria-hidden="true">S</span>
       <div>
-        <span class="eyebrow">
-          STUDY SYSTEM
-        </span>
-
-        <h1>
-          Study Coach
-        </h1>
+        <span class="eyebrow">STUDY SYSTEM</span>
+        <h1>Study Coach</h1>
       </div>
-
     </div>
-
-    <nav
-      id="navigation"
-      aria-label="Main navigation">
-    </nav>
-
+    <nav id="navigation" aria-label="Main navigation"></nav>
   </header>
 
-
   <main id="appRoot" tabindex="-1">
-
     <section class="card">
-
-      <h2>
-        Loading your saved classes…
-      </h2>
-
-      <p>
-        Allow the page to finish loading.
-        Do not clear your saved website data.
-      </p>
-
+      <h2>Loading your saved classes…</h2>
+      <p>Allow the page to finish loading. Do not clear your saved website data.</p>
     </section>
   </main>
 
-
   <aside class="sync-strip">
-
-    <span
-      id="syncStatus"
-      role="status">
-    </span>
-
-    <button
-      id="syncNow"
-      class="text-button"
-      type="button">
-      Sync now
-    </button>
-
+    <span id="syncStatus" role="status"></span>
+    <button id="syncNow" class="text-button" type="button">Sync now</button>
   </aside>
 
-
-  <p
-    id="message"
-    class="message"
-    role="status"
-    aria-live="polite">
-  </p>
-
+  <p id="message" class="message" role="status" aria-live="polite"></p>
 
   <footer>
-
     Learn → Retrieval → Crosscheck → Assess.
     Anki is Stage 3 — Assess.
-
     <br>
-
-    Keep a backup before clearing website data
-    or changing devices.
-
+    Keep a backup before clearing website data or changing devices.
     <br>
-    <span id="coachVersion">
-      Loading coaching version…
-    </span>
-
+    <span id="coachVersion">Loading coaching version…</span>
   </footer>
 
-
-  <dialog
-    id="reflectionDialog"
-    aria-labelledby="reflectionTitle">
-  </dialog>
-
-
-  <input
-    id="backupInput"
-    type="file"
-    accept="application/json,.json"
-    hidden>
-
+  <dialog id="reflectionDialog" aria-labelledby="reflectionTitle"></dialog>
+  <input id="backupInput" type="file" accept="application/json,.json" hidden>
 
   <noscript>
-    <p>
-      Enable JavaScript to use Study Coach.
-    </p>
+    <p>Enable JavaScript to use Study Coach.</p>
   </noscript>
 
+  <!-- Keep these five original script references unchanged and in order. -->
+  <script src="config.js?v=coach-20261006-2"></script>
+  <script src="app.js?v=stable-code-20261013-2"></script>
+  <script src="weekly-rhythm.js?v=weekly-rhythm-20261017-1"></script>
+  <script src="progress-v2.js?v=focused-progress-20261016-4"></script>
+  <script src="coaching-consistency.js?v=coaching-consistency-20261017-1"></script>
+</body>
+</html>
 
-  <!-- EXISTING CONFIGURATION -->
-  <script
-    src="config.js?v=coach-20261006-2">
-  </script>
-
-  <!-- EXISTING STUDY SYSTEM -->
-  <script
-    src="app.js?v=stable-code-20261013-2">
-  </script>
-
-
-  <!-- WEEKLY RHYTHM -->
-  <script
-    src="weekly-rhythm.js?v=weekly-rhythm-20261017-1">
-  </script>
-
-
-  <!-- FOCUSED PROGRESS -->
-  <script
-    src="progress-v2.js?v=focused-progress-20261016-4">
-  </script>
-
-
-  <!-- COACHING CONSISTENCY FIX -->
-  <script
-    src="coaching-consistency.js?v=coaching-consistency-20261017-1">
-  </script>
-
-  <!--
-    PRESENTATION ONLY: native, keyboard-accessible disclosure for the
-    existing seven-day grid. The weekly-rhythm.js counts and records
-    remain untouched. This does not save, change, or calculate data.
-  -->
-  <script>
-    (() => {
-      "use strict";
-
-      const root = document.getElementById("appRoot");
-      if (!root || typeof MutationObserver === "undefined") return;
-
-      function showSelectedTimeframe() {
-        const period = root.querySelector(
-          '.fp-header [data-fp-period][aria-selected="true"]'
-        )?.textContent.trim();
-
-        if (!period) return;
-
-        root.querySelectorAll(
-          ".fp-class-card .fp-dates"
-        ).forEach(dates => {
-          if (dates.parentElement.querySelector(".ss-timeframe")) return;
-
-          const label = document.createElement("span");
-          label.className = "ss-timeframe";
-          label.textContent = period + " · ";
-          // Do not edit fp-dates: existing sharing reads that exact text.
-          dates.before(label);
-        });
-      }
-
-      function makeWeeklyDetails() {
-        root.querySelectorAll(
-          ".fp-class-card .sr-rhythm"
-        ).forEach(section => {
-          // Only upgrade the original direct child, exactly once.
-          const grid = section.querySelector(":scope > .sr-days");
-          if (!grid) return;
-
-          const details = document.createElement("details");
-          details.className = "ss-week-details";
-
-          const toggle = document.createElement("summary");
-          toggle.textContent = "See my week";
-
-          details.append(toggle, grid);
-          // The original sr-counts remains ABOVE the disclosure.
-          section.appendChild(details);
-        });
-      }
-
-      let queued = false;
-      const observer = new MutationObserver(() => {
-        if (queued) return;
-        queued = true;
-
-        requestAnimationFrame(() => {
-          queued = false;
-          showSelectedTimeframe();
-          makeWeeklyDetails();
-        });
-      });
-
-      observer.observe(root, {
-        childList: true,
-        subtree: true
-      });
-
-      showSelectedTimeframe();
-      makeWeeklyDetails();
-    })();
-  </script>
 
 </body>
 </html>
