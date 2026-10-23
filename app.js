@@ -1533,7 +1533,7 @@ e.target.value="";
 };
 function init(){recoverMissingClasses();
 const versionLabel=document.getElementById("coachVersion");
-if(versionLabel){versionLabel.textContent="Learning-first coaching · "+CoachRules.version+" · my-progress-20261012-5 · recovery-20261012-2 · stable-code-20261013-2";
+if(versionLabel){versionLabel.textContent="Learning-first coaching · "+CoachRules.version+" · my-progress-20261012-5 · recovery-20261012-2 · auto-stop-20261023-3";
 }
 classes();
 sessions();
@@ -1741,7 +1741,7 @@ if([K.classes,K.sessions,K.reflections].includes(e.key)&&!active&&!dialog.open){
 }));
 
   // ================================================================
-  // STUDY COACH TIMER SAFETY — auto-stop-20261023-2
+  // STUDY COACH TIMER SAFETY — auto-stop-20261023-3
   // Paste ONCE in place of the final "bootApp();" line.
   // Existing records, coaching, recovery and Progress are not replaced.
   // ================================================================
@@ -1762,8 +1762,8 @@ if([K.classes,K.sessions,K.reflections].includes(e.key)&&!active&&!dialog.open){
     }
 
     function stopIfOverdue() {
-      if (!active || active.autoStopped ||
-          active.runningSince === null || rawElapsed() < AUTO_LIMIT_MS) {
+      if (!active || active.autoStopped || confirmingStop ||
+          rawElapsed() < AUTO_LIMIT_MS) {
         return false;
       }
 
