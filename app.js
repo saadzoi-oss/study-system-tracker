@@ -1739,5 +1739,307 @@ render();return;
 if([K.classes,K.sessions,K.reflections].includes(e.key)&&!active&&!dialog.open){render();
 }
 }));
-bootApp();
+
+  // ================================================================
+  // STUDY COACH TIMER SAFETY — auto-stop-20261023-2
+  // Paste ONCE in place of the final "bootApp();" line.
+  // Existing records, coaching, recovery and Progress are not replaced.
+  // ================================================================
+  {
+    const AUTO_LIMIT_MS = 90 * 60 * 1000;
+    const AUTO_WARN_MS = 75 * 60 * 1000;
+    let confirmingStop = null;
+
+    function timerAlert(title, body) {
+      try {
+        if (typeof Notification !== "undefined" &&
+            Notification.permission === "granted") {
+          new Notification(title, { body });
+        }
+      } catch (_) {
+        // The on-screen message remains available.
+      }
+    }
+
+    function stopIfOverdue() {
+      if (!active || active.autoStopped ||
+          active.runningSince === null || rawElapsed() < AUTO_LIMIT_MS) {
+        return false;
+      }
+
+      const earlierMs = Math.max(0, Number(active.ms) || 0);
+      const started = Number(active.runningSince) || Date.now();
+      const stoppedAt = Math.min(
+        Date.now(),
+        started + Math.max(0, AUTO_LIMIT_MS - earlierMs)
+      );
+
+      const leftAt = Number(active.awayAt) || 0;
+      const leftMs = Number(active.awayElapsed);
+      const wasAway = leftAt > 0 && leftAt < stoppedAt &&
+        Number.isFinite(leftMs) && leftMs >= 0;
+
+      active.autoStopAwayMinutes = wasAway
+        ? Math.max(0, Math.min(90, Math.floor(leftMs / 60000)))
+        : null;
+      active.autoStoppedAt = new Date(stoppedAt).toISOString();
+      active.autoStopped = true;
+      active.ms = AUTO_LIMIT_MS;
+      active.runningSince = null;
+      active.awayAt = null;
+      active.awayPrompt = null;
+      saveActive();
+
+      timerAlert(
+        "Study Coach: timer stopped",
+        "Open your app to confirm the minutes you actually studied."
+      );
+      message(
+        "Your timer stopped at 90 minutes. Confirm your actual study time before saving."
+      );
+      return true;
+    }
+
+    const originalReturn = checkReturn;
+    checkReturn = function () {
+      if (stopIfOverdue()) return;
+      return originalReturn();
+    };
+
+    const originalPause = pause;
+    pause = function () {
+      if (stopIfOverdue() || (active && active.autoStopped)) return;
+      return originalPause();
+    };
+
+    const originalStageItem = stageItem;
+    stageItem = function (record) {
+      const item = originalStageItem(record);
+      if (item && record.autoStopped) item.payload.autoStopped = "yes";
+      return item;
+    };
+
+    const originalPersist = persistRecord;
+    persistRecord = function (record) {
+      if (confirmingStop && record.id === confirmingStop.id) {
+        record.autoStopped = true;
+        if (confirmingStop.phase === "study") {
+          record.timestamp = confirmingStop.stoppedAt;
+          record.localDate = C.dateKey(new Date(confirmingStop.stoppedAt));
+        } else {
+          record.crosscheckFinishedAt = confirmingStop.stoppedAt;
+        }
+      }
+      return originalPersist(record);
+    };
+
+    const originalTimer = renderTimer;
+    renderTimer = function () {
+      if (!active) return;
+      stopIfOverdue();
+
+      if (active.autoStopped) {
+        const cross = active.phase === "crosscheck";
+        const away = active.autoStopAwayMinutes;
+        const hint = away === null
+          ? "Enter the minutes you actually studied, not the time the timer displayed."
+          : "The app showed about " + away +
+            " minutes when you left it. Enter the actual minutes, including any work you continued elsewhere.";
+
+        root.innerHTML =
+          '<section class="card timer">' +
+          '<span class="eyebrow">' + esc(active.className) + '</span>' +
+          '<h2>Timer automatically stopped</h2>' +
+          '<p><strong>' + (cross ? "Crosscheck" :
+            "Stage " + active.stage + " — " + C.stageName(active.stage)) +
+          '</strong> · ' + esc(active.method) + '</p>' +
+          '<div class="notice" role="alert">' +
+          '<p>The 90-minute safety limit was reached. ' +
+          '<strong>No time from this unfinished timer phase has been added to Progress.</strong></p>' +
+          '<p>' + hint + '</p>' +
+          '<label for="actualStudyMinutes"><strong>Minutes actually studied (0–90)</strong></label>' +
+          '<input id="actualStudyMinutes" type="number" min="0" max="90" ' +
+          'step="1" inputmode="numeric" placeholder="Enter minutes" ' +
+          'style="display:block;width:100%;max-width:230px;margin:.5rem 0" />' +
+          '<p class="small">Enter 0 if you did not study during this timer phase.</p>' +
+          '<div class="actions">' +
+          '<button type="button" class="primary" data-timer-review="save">Save actual time</button>' +
+          '<button type="button" class="secondary" data-timer-review="' +
+          (cross ? "skip" : "discard") + '">' +
+          (cross ? "Skip Crosscheck" : "Discard this stage") +
+          '</button></div></div>' +
+          '<p class="small">This safety limit is not a study-time goal.</p>' +
+          '</section>';
+        return;
+      }
+
+      originalTimer();
+      const card = root.querySelector("section.timer");
+      if (!card) return;
+
+      const note = document.createElement("p");
+      note.className = "small";
+      note.textContent =
+        "Safety stop: 90 minutes per timer phase. You will confirm actual time before an auto-stopped phase is saved.";
+      card.appendChild(note);
+
+      if (typeof Notification !== "undefined" &&
+          Notification.permission === "default") {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "text-button";
+        button.dataset.timerReview = "notifications";
+        button.textContent = "Enable timer notifications (optional)";
+        card.appendChild(button);
+      }
+    };
+
+    const originalFinish = finishTimer;
+    finishTimer = function (skip = false) {
+      if (!active) return;
+      if (stopIfOverdue() || active.autoStopped) {
+        renderTimer();
+        return;
+      }
+      const priorPhase = active.phase;
+      const priorId = active.id;
+      const result = originalFinish(skip);
+
+      // The new Crosscheck phase needs its own 75/90-minute clock.
+      if (priorPhase === "study" && active &&
+          active.id === priorId && active.phase === "crosscheck") {
+        active.autoStopWarned = false;
+        saveActive();
+      }
+      return result;
+    };
+
+    // This listener handles only the three new review buttons.
+    // Existing timer, Study Log and coaching buttons stay untouched.
+    document.addEventListener("click", function (event) {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const action = button.dataset.timerReview;
+
+      if (!action && !(active && active.autoStopped)) return;
+
+      if (action || (active && active.autoStopped)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+
+      if (action === "notifications") {
+        if (typeof Notification === "undefined" ||
+            typeof Notification.requestPermission !== "function") {
+          message("Device notifications are unavailable. In-app notices will still appear.");
+          return;
+        }
+        Promise.resolve(Notification.requestPermission())
+          .then(permission => {
+            message(permission === "granted"
+              ? "Browser alerts enabled when your device allows them."
+              : "In-app timer notices will still appear.");
+          })
+          .catch(() => message("Browser notifications are unavailable."));
+        return;
+      }
+
+      if (!active || !active.autoStopped) return;
+
+      if (action === "discard") {
+        if (confirm("Discard this unfinished stage? No time will be recorded.")) {
+          active = null;
+          saveActive();
+          screen = "stage";
+          render();
+          message("Unfinished stage discarded. No time was recorded.");
+        }
+        return;
+      }
+
+      if (action === "skip") {
+        finishConfirmed(0);
+        return;
+      }
+
+      if (action !== "save") {
+        renderTimer();
+        return;
+      }
+
+      const input = document.getElementById("actualStudyMinutes");
+      const value = input ? String(input.value).trim() : "";
+      const minutes = /^\d{1,2}$/.test(value) || value === "90"
+        ? Number(value)
+        : NaN;
+
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > 90) {
+        message("Enter a whole number from 0 to 90.");
+        if (input) input.focus();
+        return;
+      }
+
+      if (minutes === 0 && active.phase === "study") {
+        active = null;
+        saveActive();
+        screen = "stage";
+        render();
+        message("No study time was recorded.");
+        return;
+      }
+      finishConfirmed(minutes);
+    }, true);
+
+    function finishConfirmed(minutes) {
+      const phase = active.phase;
+      confirmingStop = {
+        id: active.id,
+        phase,
+        stoppedAt: active.autoStoppedAt || new Date().toISOString()
+      };
+      const old = { ...active };
+
+      active.ms = minutes * 60000;
+      active.runningSince = null;
+      active.awayAt = null;
+      active.awayPrompt = null;
+      active.autoStopped = false;
+
+      try {
+        finishTimer(phase === "crosscheck" && minutes === 0);
+        message("Auto-stopped timer: " + minutes +
+          " minute" + (minutes === 1 ? "" : "s") +
+          " confirmed and saved locally. Google sync will follow.");
+      } catch (error) {
+        active = old;
+        saveActive();
+        renderTimer();
+        message("Could not save the confirmed time: " + error.message);
+      } finally {
+        confirmingStop = null;
+      }
+    }
+
+    setInterval(function () {
+      try {
+        if (!active || active.autoStopped || active.runningSince === null) return;
+        if (stopIfOverdue()) {
+          renderTimer();
+          return;
+        }
+        if (!active.autoStopWarned && rawElapsed() >= AUTO_WARN_MS) {
+          active.autoStopWarned = true;
+          saveActive();
+          timerAlert("Study Coach timer warning",
+            "Your timer is at 75 minutes. It will stop at 90 minutes.");
+          message("Timer warning: auto-stop in 15 minutes. Pause or finish if you are done.");
+          renderTimer();
+        }
+      } catch (error) {
+        console.error("Study Coach timer safeguard:", error);
+      }
+    }, 1000);
+  }
+  bootApp();
+
 })();
