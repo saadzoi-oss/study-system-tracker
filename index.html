@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -12,7 +11,7 @@
     STUDY COACH — COACHING VIEW LAYOUT
     Presentation-only: no JavaScript added.
     No changes to data, coaching decisions, syncing, or sharing.
-    Original Progress, rhythm, and consistency scripts stay loaded.
+    Original Progress charts and weekly rhythm remain. New app.js supplies coaching.
   -->
   <style>
     /* Keep the important information in the first screenful. */
@@ -35,7 +34,7 @@
       overflow-wrap: anywhere;
     }
 
-    /* 2 — The existing recommendation, with no new coaching rules. */
+    /* 2 — One activity-based recommendation from app.js. */
     #appRoot .fp-class-card > .fp-coach {
       order: 1;
       margin: 0;
@@ -56,8 +55,8 @@
     }
 
     /*
-      The original action container stays in the DOM for app.js,
-      coaching-consistency.js, and the existing share handler.
+      The original action container stays in the DOM for app.js
+      and the existing share handler.
       Only its children's visual positions change.
     */
     #appRoot .fp-class-card > .fp-actions {
@@ -166,6 +165,92 @@
         width: 100%;
       }
     }
+
+    /* VNext usability improvements. Existing Progress script owns the data. */
+    .vnext-guide {
+      border-left: 4px solid #087d75;
+    }
+    .vnext-guide h2 { margin-bottom: .5rem; }
+    .vnext-inline-tip {
+      margin: .75rem 0;
+      padding: .75rem .9rem;
+      background: #eef6f3;
+      border: 1px solid #c2ddd4;
+      border-radius: .75rem;
+      font-size: .92rem;
+    }
+    .vnext-manual { max-width: 700px; }
+    .vnext-manual input[type="date"],
+    .vnext-manual input[type="number"],
+    .vnext-manual select {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 520px;
+      min-height: 46px;
+      padding: .6rem .7rem;
+      font: inherit;
+      color: #17344d;
+      background: white;
+      border: 1px solid #c9d7e2;
+      border-radius: 10px;
+    }
+    .vnext-manual input:focus-visible,
+    .vnext-manual select:focus-visible {
+      outline: 3px solid #ecaa32;
+      outline-offset: 2px;
+    }
+    .vnext-report-label {
+      color: #72521a;
+      font-size: .78rem;
+      font-weight: 700;
+    }
+    .vnext-small-actions { margin: 0; gap: .4rem; }
+    .vnext-backup-strip {
+      max-width: 1016px;
+      margin: 0 auto 14px;
+      padding: 0 18px;
+    }
+    .vnext-backup-strip details {
+      padding: .55rem .8rem;
+      border: 1px solid #d8e4e4;
+      border-radius: .75rem;
+      background: #f3f9f7;
+      color: #244d46;
+      font-size: .86rem;
+    }
+    .vnext-backup-strip summary {
+      cursor: pointer;
+      font-weight: 650;
+    }
+    /* Keep only the next step and total time visible by default.
+       The existing breakdown and weekly rhythm remain in the DOM. */
+    #appRoot .fp-class-card:not(.vnext-expanded) > .fp-times,
+    #appRoot .fp-class-card:not(.vnext-expanded) > .fp-bar,
+    #appRoot .fp-class-card:not(.vnext-expanded) > .sr-rhythm {
+      display: none !important;
+    }
+    #appRoot .fp-class-card > .vnext-details-toggle {
+      order: 5;
+      align-self: flex-start;
+      max-width: 100%;
+      margin: .85rem 0 .25rem;
+      text-align: left;
+      min-height: 44px;
+    }
+    #appRoot .fp-header > .vnext-progress-manual {
+      margin: .65rem 0 0;
+      max-width: 100%;
+    }
+    @media (max-width: 560px) {
+      #appRoot .fp-class-card > .vnext-details-toggle,
+      #appRoot .fp-header > .vnext-progress-manual {
+        width: 100%;
+        align-self: stretch;
+      }
+      .vnext-small-actions { flex-wrap: wrap; }
+      .vnext-manual .actions button { width: 100%; }
+    }
   </style>
 </head>
 
@@ -211,11 +296,13 @@
     <p>Enable JavaScript to use Study Coach.</p>
   </noscript>
 
-  <!-- Keep these five original script references unchanged and in order. -->
+  <!-- Integrated VNext v2 script order. Legacy data and progress graphs are retained. -->
   <script src="config.js?v=coach-20261006-2"></script>
-  <script src="app.js?v=auto-stop-20261023-3"></script>
+  <script src="app.js?v=vnext-20261105-3"></script>
   <script src="weekly-rhythm.js?v=weekly-rhythm-20261017-1"></script>
   <script src="progress-v2.js?v=focused-progress-20261016-4"></script>
-  <script src="coaching-consistency.js?v=coaching-consistency-20261017-1"></script>
+  <!-- Legacy coaching-consistency display is intentionally not loaded:
+       VNext app.js supplies the single data-led recommendation instead.
+       The original file remains in the repository and is not deleted. -->
 </body>
 </html>
