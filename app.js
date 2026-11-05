@@ -491,6 +491,9 @@ const RecoveryState = (() => {
       if (!obj(r) || typeof r.className !== 'string' || !day(r.weekStart) || !Number.isFinite(Date.parse(r.timestamp)))
         throw new Error('Invalid saved check-in.');
     }));
+    if (s.pulses !== undefined && !obj(s.pulses)) throw new Error('Invalid learning pulse backup.');
+    if (s.pulseSchedule !== undefined && s.pulseSchedule !== null &&
+        !obj(s.pulseSchedule)) throw new Error('Invalid learning pulse schedule.');
     return JSON.parse(JSON.stringify(s));
   }
   function merge(a,b) {
@@ -524,6 +527,14 @@ const RecoveryState = (() => {
       });
     });
     out.anki=Object.assign({},a.anki,b.anki);
+    out.pulses=Object.assign({},a.pulses||{});
+    Object.entries(b.pulses||{}).forEach(([week,rec])=>{
+      const old=out.pulses[week];
+      if (!old || String(rec.timestamp||'') > String(old.timestamp||'')) out.pulses[week]=rec;
+    });
+    const pA=a.pulseSchedule||null,pB=b.pulseSchedule||null;
+    out.pulseSchedule = !pA ? pB : !pB ? pA :
+      String(pB.lastRespondedWeek||'') >= String(pA.lastRespondedWeek||'') ? pB : pA;
     const starts=[a.startWeek,b.startWeek].filter(day).sort(); out.startWeek=starts[0]||'';
     // An old cloud timer must never override a live local timer.
     out.active=b.active||null;
@@ -533,9 +544,9 @@ const RecoveryState = (() => {
 })();
 
 (()=>{"use strict";
-const K={classes:"studySystem.classes.v4",sessions:"studySystem.sessions.v4",device:"studySystem.deviceId.v4",submissions:"studySystem.weeklySubmissions.v4",ankiDone:"studySystem.ankiDone.v4.",ankiHide:"studySystem.ankiDismiss.v4.",reflections:"studySystem.weeklyReflections.v1",start:"studySystem.reflectionStartWeek.v1",active:"studySystem.activeSession.v1",queue:"studySystem.outbox.v1",sync:"studySystem.syncReceipts.v1",backup:"studySystem.preCoachBackup.v1",history:"studySystem.reflectionHistory.v1"};
+const K={helpSeen:"studySystem.quickGuideSeen.v1",classes:"studySystem.classes.v4",sessions:"studySystem.sessions.v4",device:"studySystem.deviceId.v4",submissions:"studySystem.weeklySubmissions.v4",ankiDone:"studySystem.ankiDone.v4.",ankiHide:"studySystem.ankiDismiss.v4.",reflections:"studySystem.weeklyReflections.v1",start:"studySystem.reflectionStartWeek.v1",active:"studySystem.activeSession.v1",queue:"studySystem.outbox.v1",sync:"studySystem.syncReceipts.v1",backup:"studySystem.preCoachBackup.v1",history:"studySystem.reflectionHistory.v1",pulses:"studySystem.learningPulses.v1",pulseSchedule:"studySystem.learningPulseSchedule.v1"};
 const C=StudyCoach;
-const catalog={"Math":["Algebra 1","Geometry","Algebra 2","Integrated Math","Math Analysis","Precalculus","Calculus","AP Calculus AB","AP Statistics","Other Math"],"Science":["Biology","Honors Biology","Chemistry","Physics","Physiology","AP Biology","AP Chemistry","AP Environmental Science","AP Physics 1","Other Science"],"English":["English 9","English 9 Honors","English 10","English 10 Honors","American Literature","American Literature Honors","AP English Language","Advanced Composition","Advanced Composition Honors","AP English Literature","Other English"],"History / Social Science":["World History","Honors World History","AP World History","U.S. History","AP U.S. History","Government","Economics","AP Government","AP Human Geography","AP Psychology","Ethnic Studies","Health","Other History / Social Science"],"World Language":["Spanish","Spanish 2","Spanish 3","AP Spanish Language","AP Spanish Literature","Other World Language"],"Elective / CTE":["Architecture 1","Architecture 2","Architectural Design","Digital Design","Film & Video Production","Exploring Computer Science","Robotics","Child Development","Health Science","Emergency Medical Technician","Art","AP Drawing","AP 3-D Art & Design","AP Seminar","AP Research","JROTC","PE / Athletics","Other Elective / CTE"]};
+const catalog={"Math":["Algebra 1","Geometry","Algebra 2","Integrated Math","Math Analysis","Precalculus","Calculus","AP Calculus AB","AP Statistics","Other Math"],"Science":["Biology","Honors Biology","Chemistry","Physics","Physiology","AP Biology","AP Chemistry","AP Environmental Science","AP Physics 1","Other Science"],"English":["English 9","English 9 Honors","English 10","English 10 Honors","American Literature","American Literature Honors","AP English Language","Advanced Composition","Advanced Composition Honors","AP English Literature","Other English"],"AP Capstone":["AP Seminar","AP Research"],"Independent Learning":["Personal Study","Professional Certification","Language Practice","Other Independent Learning"],"History / Social Science":["World History","Honors World History","AP World History","U.S. History","AP U.S. History","Government","Economics","AP Government","AP Human Geography","AP Psychology","Ethnic Studies","Health","Other History / Social Science"],"World Language":["Spanish","Spanish 2","Spanish 3","AP Spanish Language","AP Spanish Literature","Other World Language"],"Elective / CTE":["Architecture 1","Architecture 2","Architectural Design","Digital Design","Film & Video Production","Exploring Computer Science","Robotics","Child Development","Health Science","Emergency Medical Technician","Art","AP Drawing","AP 3-D Art & Design","JROTC","PE / Athletics","Other Elective / CTE"]};
 const stages={1:{name:"Learn",purpose:"Build or rebuild your understanding using your learning materials.",instruction:"Use your notes, textbook, examples, videos, AI, Unit Coach, or "+"other learning resources to understand the material.",methods:["Study / Review","Textbook","Video","Concept Map","Worked Examples","AI Tutor","Unit Coach"]},2:{name:"Retrieval",purpose:"See what you can teach or produce from memory.",instruction:"Put your materials away. Do not check your notes yet. "+"First show yourself what you actually know.",methods:["Teach","Redo Notes from Memory","Concept Map from Memory","AI — Teach & Check"]},3:{name:"Assess",purpose:"Test what you can do independently without help.",instruction:"Treat this like a real assessment. Avoid hints or "+"explanations until the activity is finished.",methods:["Homework as Test","Practice Test","Practice Problems","Anki","AI Practice Test","AI Game"]}};
 const $=id=>document.getElementById(id);
 const root=$("appRoot");
@@ -568,6 +579,210 @@ const DAMAGED='studySystem.damagedRecords.v1';
 let safetyDb=null,safetyReady=false,safetyTimer=null,safetyWriting=Promise.resolve();
 let safetyNotice='',storageProtection='';
 let logClass='',logWeek='',logPage=0;
+
+// Study Coach VNext: one whole-study-period pulse, separate from legacy 1–5 check-ins.
+// No historical ratings are deleted or synthesized from Yes/No answers.
+const Pulse = (() => {
+  const VERSION = "learning-pulse-20261105-3";
+  const twoWeeks = 14;
+  const valid = C.validDate;
+  const plus = C.addDays;
+  const week = C.weekStart;
+  function all() {
+    const saved = read(K.pulses, {});
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  }
+  function lastRecord() {
+    return Object.values(all()).filter(x => x && valid(x.reviewWeek))
+      .sort((a,b) => String(b.reviewWeek).localeCompare(String(a.reviewWeek)))[0] || null;
+  }
+  function schedule() {
+    let state = read(K.pulseSchedule, null);
+    const last = lastRecord();
+    // A recovery/import may contain a newer answer than the saved schedule.
+    // Repair the schedule from that answer rather than asking the same question again.
+    if (state && valid(state.nextDueWeek) && [2,4,8].includes(Number(state.intervalWeeks))) {
+      if (last && last.reviewWeek > String(state.lastRespondedWeek || "")) {
+        state=Object.assign({},state,{
+          nextDueWeek: valid(last.nextDueWeek) ? last.nextDueWeek : plus(last.reviewWeek,14),
+          intervalWeeks:[2,4,8].includes(Number(last.nextIntervalWeeks)) ?
+            Number(last.nextIntervalWeeks) : 2,
+          lastRespondedWeek:last.reviewWeek,
+          positiveStreak:Math.max(0,Number(last.positiveStreak)||0),
+          hiddenDate:""
+        });
+        write(K.pulseSchedule,state);
+      }
+      return state;
+    }
+    const start = week(today());
+    state = last ? {
+      anchorWeek: valid(last.windowStart) ? last.windowStart : start,
+      nextDueWeek: valid(last.nextDueWeek) ? last.nextDueWeek : plus(last.reviewWeek,14),
+      intervalWeeks: [2,4,8].includes(Number(last.nextIntervalWeeks)) ? Number(last.nextIntervalWeeks) : 2,
+      positiveStreak: Math.max(0,Number(last.positiveStreak)||0),
+      lastRespondedWeek: last.reviewWeek,
+      hiddenDate: ""
+    } : {
+      anchorWeek: start,
+      nextDueWeek: plus(start,7), // First review at the end of the second week.
+      intervalWeeks: 2,
+      positiveStreak: 0,
+      lastRespondedWeek: "",
+      hiddenDate: ""
+    };
+    write(K.pulseSchedule,state);
+    return state;
+  }
+  function studyRows(start,end) {
+    return sessions().filter(r=>{
+      const day = C.localDay(r);
+      return day && day>=start && day<end && [1,2,3].includes(Number(r.stage));
+    });
+  }
+  function mostRecentFinishedWeek() {
+    const start=week(today());
+    return C.daysBetween(start,today())===6 ? start : plus(start,-7);
+  }
+  function due() {
+    if(!classes().length || !sessions().length) return null;
+    const s=schedule(), latest=mostRecentFinishedWeek();
+    if (s.hiddenDate===today() || s.nextDueWeek>latest) return null;
+    // A returning student reviews the most recently completed weeks, not a stale old period.
+    const reviewWeek=latest;
+    const windowStart=plus(reviewWeek,-7*(s.intervalWeeks-1));
+    const rows=studyRows(windowStart,plus(reviewWeek,7));
+    if(!rows.some(r=>C.number(r.studySeconds)>0)) return null;
+    if(all()[reviewWeek]) return null;
+    return {state:s, reviewWeek, windowStart, rows};
+  }
+  function dismiss() {
+    const s=schedule();
+    s.hiddenDate=today();
+    write(K.pulseSchedule,s);
+  }
+  function banner() {
+    const p=due();
+    if(!p)return "";
+    return '<section class="card" id="learningPulsePrompt" aria-label="Quick learning check-in">'+
+      '<span class="eyebrow">ONE QUESTION · QUICK LEARNING CHECK</span>'+
+      '<h2>Was your learning effective during this study period?</h2>'+
+      '<p class="small">Think about the last '+p.state.intervalWeeks+
+      ' completed weeks. Your answer helps us choose when to check in again. We cannot determine learning from time alone.</p>'+
+      '<div class="actions">'+
+      '<button type="button" class="primary" data-action="pulse-yes">Yes</button>'+
+      '<button type="button" class="secondary" data-action="pulse-no">Not yet</button>'+
+      '<button type="button" class="secondary" data-action="pulse-unsure">Not sure</button>'+
+      '<button type="button" class="text-button" data-action="pulse-later">Ask me later</button>'+
+      '</div></section>';
+  }
+  function saveAnswer(answer) {
+    if(!["yes","no","unsure"].includes(answer)) throw new Error("Choose a response.");
+    const dueNow=due();
+    if(!dueNow) throw new Error("This check-in is no longer due. Refresh your Study page.");
+    const s=dueNow.state, rows=dueNow.rows;
+    const summary=C.summarize(rows);
+    const enoughActivity=summary.positive>=2 && summary.days.length>=2;
+    const streak=answer==="yes"&&enoughActivity ? s.positiveStreak+1 : 0;
+    const nextInterval=answer==="yes"&&enoughActivity ?
+      Math.min(8,Math.max(4,s.intervalWeeks*2)) : 2;
+    const nextDueWeek=plus(dueNow.reviewWeek,7*nextInterval);
+    const record={
+      version:VERSION,ownerDeviceId:deviceId(),timestamp:new Date().toISOString(),
+      reviewWeek:dueNow.reviewWeek,windowStart:dueNow.windowStart,
+      periodWeeks:s.intervalWeeks,effective:answer,
+      nextIntervalWeeks:nextInterval,nextDueWeek,positiveStreak:streak,
+      activityEvidence:{completedStages:summary.count,positiveStages:summary.positive,
+        days:summary.days.length,retrieval:summary.stages[2].count,
+        checked:summary.crossCount,assess:summary.stages[3].count},
+      snapshot:summary
+    };
+    const saved=all();
+    saved[record.reviewWeek]=record;
+    write(K.pulses,saved);
+    const next=Object.assign({},s,{
+      nextDueWeek,intervalWeeks:nextInterval,positiveStreak:streak,
+      lastRespondedWeek:record.reviewWeek,hiddenDate:""
+    });
+    write(K.pulseSchedule,next);
+    queuePulse(record);
+    return record;
+  }
+  function queuePulse(record) {
+    if(!record || !valid(record.reviewWeek) || !["yes","no","unsure"].includes(record.effective))return;
+    enqueue("pulse:"+deviceId()+":"+record.reviewWeek,{
+      action:"submitPulse",deviceId:deviceId(),timestamp:record.timestamp,
+      reviewWeek:record.reviewWeek,windowStart:record.windowStart,
+      effective:record.effective,periodWeeks:record.periodWeeks,
+      nextIntervalWeeks:record.nextIntervalWeeks,nextDueWeek:record.nextDueWeek,
+      snapshotJson:JSON.stringify(record.snapshot)
+    });
+  }
+  function advice(name,start=null,end=null) {
+    const nowStart=week(today());
+    const lo=start||plus(nowStart,-21),hi=end||plus(nowStart,7);
+    const rows=studyRows(lo,hi).filter(r=>r.className===name);
+    const s=C.summarize(rows);
+    const learn=s.stages[1].count, retrieve=s.stages[2].count,
+          assess=s.stages[3].count,cross=s.crossCount;
+    const positive=rows.filter(r=>C.number(r.studySeconds)>0).length;
+    const uniqueDays=s.days.length;
+    const base={caution:"Based on recorded activity, not proof of learning or grades.",
+      count:s.count,days:uniqueDays,focus:"",stage:0,title:"",explanation:"",next:""};
+    function make(title,explanation,next,stage,focus) {
+      return Object.assign({},base,{title,explanation,next,stage,focus});
+    }
+    if(!positive)return make("Start with one useful activity",
+      "No completed study activity is recorded for this class in the selected period.",
+      "Choose a topic and try a short method that matches what you need.",0,"start");
+    if(positive<2||uniqueDays<2)return make("Collect a little more evidence",
+      "You have "+positive+" positive-time stage"+(positive===1?"":"s")+" on "+uniqueDays+
+      " day"+(uniqueDays===1?"":"s")+". That is too little to judge a pattern.",
+      "After studying, try explaining one idea without notes, then check what you missed.",2,"limited");
+    if(retrieve===0&&(learn+assess)>0)return make("Try a memory check",
+      "You recorded "+(learn+assess)+" Learn or Assess stages, but no separate Retrieval.",
+      "Close your materials, explain one idea from memory, then Crosscheck with your notes.",2,"retrieval");
+    if(retrieve>0&&cross===0)return make("Check your recalled work",
+      "Retrieval is recorded, but no Crosscheck time was recorded.",
+      "After your next Retrieval, compare with a reliable source and correct one gap.",2,"crosscheck");
+    if(retrieve>0&&assess===0)return make("Try an independent practice check",
+      "Retrieval is recorded, but no independent Assess practice is logged.",
+      "Try a brief practice test or problems after Retrieval and Crosscheck. A school exam is not required.",3,"assess");
+    const testMethods=["Practice Test","AI Practice Test","Practice Problems","Homework as Test"];
+    const tests=rows.filter(r=>Number(r.stage)===3&&testMethods.includes(r.method)).length;
+    const anki=rows.filter(r=>Number(r.stage)===3&&r.method==="Anki").length;
+    if(assess>=3&&anki>=Math.ceil(assess*.65)&&tests===0)return make("Add a different kind of practice",
+      "Most of your Assess activities were Anki; no test-style problems were logged.",
+      "Keep Anki if useful, and try one practice problem that resembles your classwork.",3,"test");
+    return make("Keep exploring what works",
+      "Your log includes Retrieval, Crosscheck, and Assess activity across "+uniqueDays+" days.",
+      "Keep a method you find useful and try one independent question to check what you know.",0,"maintain");
+  }
+  function latestSummary(){
+    const r=lastRecord();
+    if(!r)return "";
+    const label={yes:"effective",no:"not effective yet",unsure:"uncertain"}[r.effective]||"unrated";
+    const e=r.activityEvidence||{};
+    let next="";
+    if(r.effective==="yes"){
+      next=" Keep what seemed useful, then try one independent question to check it.";
+    }else if(Number(e.positiveStages)<2){
+      next=" There is too little recorded activity to identify a pattern. Try one short memory check.";
+    }else if(Number(e.retrieval)===0){
+      next=" No separate Retrieval was recorded. Try recalling one idea without notes and then check it.";
+    }else if(Number(e.checked)===0){
+      next=" No Crosscheck time was recorded. Compare your next recall with your notes and correct a gap.";
+    }else if(Number(e.assess)===0){
+      next=" No Assess practice was logged. Try one independent problem after Retrieval and Crosscheck.";
+    }else{
+      next=" Your log includes several study stages. Choose one missed question and check the specific gap.";
+    }
+    return "Last learning check: "+label+" (week of "+r.reviewWeek+")."+
+      next+" Next question is planned for the week of "+r.nextDueWeek+".";
+  }
+  return {VERSION,all,schedule,due,dismiss,banner,saveAnswer,queuePulse,advice,latestSummary,studyRows};
+})();
+
 function safetyKey(key){return key.startsWith('studySystem.')&&![SAFETY,DAMAGED,K.backup,'studySystem.beforeRestore.v1'].includes(key);}
 function validateSafety(snapshot){
   if(!snapshot||snapshot.format!=='Study System Local Safety'||!snapshot.data||typeof snapshot.data!=='object'||Array.isArray(snapshot.data)||!Number.isFinite(snapshot.savedAt))throw new Error('Invalid local safety copy.');
@@ -652,9 +867,9 @@ function recoveryIdentity(){let r=read(RK,null);if(!r){r={writerSecret:recoveryS
 function recoveryHasHistory(){return sessions().length>0||historyList().length>0||!!read(K.active,null);}
 function recoveryHasData(){return classes().length>0||sessions().length>0||historyList().length>0||!!read(K.active,null);}
 function recoverySnapshot(){const anki={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key.startsWith(K.ankiDone)||key.startsWith(K.ankiHide))anki[key]=localStorage.getItem(key);}
-  return RecoveryState.validate({schema:1,deviceId:deviceId(),classes:classes(),sessions:sessions(),reflections:reflections(),history:reflectionHistory(),startWeek:localStorage.getItem(K.start)||'',anki,active:read(K.active,null)});}
+  return RecoveryState.validate({schema:1,deviceId:deviceId(),classes:classes(),sessions:sessions(),reflections:reflections(),history:reflectionHistory(),startWeek:localStorage.getItem(K.start)||'',anki,active:read(K.active,null),pulses:Pulse.all(),pulseSchedule:read(K.pulseSchedule,null)});}
 function scheduleRecovery(key=''){if(key===RK||recoveryRestoring||storageBlocked)return;
-  if(key&&![K.classes,K.sessions,K.reflections,K.history,K.start,K.active].includes(key)&&!key.startsWith(K.ankiDone)&&!key.startsWith(K.ankiHide))return;
+  if(key&&![K.classes,K.sessions,K.reflections,K.history,K.start,K.active,K.pulses,K.pulseSchedule].includes(key)&&!key.startsWith(K.ankiDone)&&!key.startsWith(K.ankiHide))return;
   clearTimeout(recoveryTimer);
   recoveryTimer=setTimeout(()=>syncRecovery(),Math.max(1500,20000-(Date.now()-recoveryLastAttempt)));
 }
@@ -664,6 +879,18 @@ function recoveryBanner(){
   let r;try{r=read(RK,null);}catch(e){return;}
   const code=r&&r.code;
   const saved=r&&r.lastSaved;
+  const wasExpanded=Boolean(panel.querySelector("details")?.open);
+  if(code&&r.codeSeen&&saved&&!recoveryError&&!recoveryBusy){
+    panel.className="vnext-backup-strip";
+    panel.innerHTML='<details'+(wasExpanded?' open':'')+'><summary>Device records saved · cloud backup confirmed '+
+      esc(new Date(saved).toLocaleString())+' · Recovery options</summary>'+
+      '<p class="small">Your data is stored on this device. Google study uploads are separate from cloud recovery backups.</p>'+
+      '<p class="small">Your recovery code: <strong>'+esc(code)+'</strong></p>'+
+      '<button type="button" class="text-button" data-action="copy-recovery-code">Copy code</button>'+
+      '<button type="button" class="text-button" data-nav="backup">Backup & Recovery</button></details>';
+    return;
+  }
+  panel.className="notice";
   panel.innerHTML='<strong>'+(code?'Your recovery code: '+esc(code):recoveryHasData()?'Setting up your recovery code':'Used this tracker before? Get your classes back with your recovery code.')+'</strong> '+
     (code?'<button type="button" class="text-button" data-action="copy-recovery-code">Copy code</button> ':'')+'<button type="button" class="text-button" data-nav="backup">Backup & Recovery</button>'+ 
     '<p class="small">'+esc(recoveryError?'Backup pending: '+recoveryError:
@@ -736,6 +963,7 @@ async function restoreCloudRecovery(){
       [K.classes]:JSON.stringify(merged.classes),[K.sessions]:JSON.stringify(merged.sessions),
       [K.reflections]:JSON.stringify(merged.reflections),[K.history]:JSON.stringify(merged.history),
       [K.device]:sourceId,[K.start]:merged.startWeek||localStorage.getItem(K.start)||C.weekStart(today()),
+      [K.pulses]:JSON.stringify(merged.pulses||{}),[K.pulseSchedule]:JSON.stringify(merged.pulseSchedule||null),
       [RK]:JSON.stringify(Object.assign(identity,response.recovery,{backup:undefined,sourceProfileId:undefined,profileId:sourceId,fingerprint:'',lastSaved:response.recovery.updatedAt,codeSeen:true}))
     };
     if(!sameTracker){updates[K.queue]='[]';updates[K.sync]='{}';}
@@ -757,6 +985,7 @@ async function restoreCloudRecovery(){
     recoveryPreview=null;reminderDismissed=true;screen=active?'timer':'home';render();
     sessions().filter(r=>r.id).forEach(queueStage);
     historyList().filter(r=>r.revisionId&&r.recommendation&&r.snapshot).forEach(queueReflection);
+    Object.values(Pulse.all()).forEach(Pulse.queuePulse);
     checkpointSafety(true);
     message('Your classes and history are back. Your recovery code is still '+response.recovery.code+'.');
   }catch(e){recoveryMessage(e.message);}finally{recoveryRestoring=false;checkpointSafety(true);scheduleRecovery();recoveryBanner();}
@@ -905,7 +1134,7 @@ if(!checks.length){return sessions().some(r=>r.className===name)?"Learn logged; 
 const diff=C.daysBetween(C.localDay(checks[0]),today());
 return diff<=0?"Last checked today":diff===1?"Last checked yesterday":"Last checked "+diff+" days ago";
 }
-function pending(){return C.pending(sessions(),reflections(),localStorage.getItem(K.start)||C.weekStart(today()),today());
+function pending(){return []; /* Legacy two-rating prompts are retired; records remain archived. */
 }
 function ankiDue(){const start=C.weekStart(today());
 const out=[];
@@ -914,7 +1143,7 @@ const out=[];
 });
 return out;
 }
-const AWAY_MS=30*60000,CAP_MS=3*3600000;
+const AWAY_MS=30*60000,CAP_MS=24*3600000;
 function rawElapsed(){return active?Math.max(0,Number(active.ms)||0)+(active.runningSince!==null?Math.max(0,Date.now()-active.runningSince):0):0;
 }
 function markAway(){if(active&&active.runningSince!==null&&!active.awayAt){active.awayAt=Date.now();active.awayElapsed=elapsed();
@@ -954,11 +1183,18 @@ function render(){$("navigation").innerHTML=active?'<span class="small">Session 
 if(active)screen="timer";
 if(screen==="home"&&!classes().length){screen="classes";
 }
+if(screen==="home"&&classes().length===1&&!active){
+  chosenClass=classes()[0];
+  chosenStage=null;
+  visitId=visitId||uid();
+  screen="stage";
+}
 if(screen==="classes"){renderClasses();
 }else if(screen==="stage"){renderStages();
 }else if(screen==="timer"){renderTimer();
 }else if(screen==="complete"){renderComplete();
 }else if(screen==="progress"){renderProgress();
+}else if(screen==="manual"){renderManual();
 }else if(screen==="log"){renderStudyLog();
 }else if(screen==="backup"){renderBackup();
 }else{renderHome();
@@ -968,33 +1204,137 @@ recoveryBanner();
 }
 function renderHome(){const due=pending();
 const anki=ankiDue();
-let s='<section class="card intro">'+'<span class="eyebrow">YOUR NEXT STUDY VISIT</span>'+"<h2>Pick a class. Make one useful next move.</h2>"+'<p class="muted">'+"Start at any stage. A second stage is always optional."+"</p></section>";
+let s=Pulse.banner()+'<section class="card intro">'+'<span class="eyebrow">YOUR NEXT STUDY VISIT</span>'+"<h2>Pick a class. Make one useful next move.</h2>"+'<p class="muted">'+"Start at any stage. A second stage is always optional."+"</p></section>";
 if(due.length){s+='<section class="notice"><strong>'+due.length+" weekly check-in"+(due.length===1?" is":"s are")+' waiting</strong><p class="small">'+"Two ratings per class. Unanswered check-ins stay here, "+"including after the week ends.</p>"+'<button class="primary" data-action="reflect">'+"Answer check-in</button></section>";
 }
 if(anki.length&&localStorage.getItem(K.ankiHide+today())!=="1"){s+='<section class="notice">'+"<strong>Anki — Stage 3 Assess</strong><p>"+(anki[0]===today()?"Your Monday/Thursday Anki session is due today.":"An Anki make-up for "+pretty(anki[0])+" is due this week.")+'</p><div class="actions">'+'<button class="primary" data-action="anki">'+"Choose a class for Anki</button>"+'<button class="secondary" data-action="hide-anki">'+"Hide for today</button></div></section>";
 }
-s+='<section class="card">'+'<div class="section-head">'+"<h2>Your classes</h2>"+'<button class="secondary" data-nav="classes">'+"Edit classes</button></div>"+'<div class="class-grid">';
+s+='<section class="card">'+'<div class="section-head">'+"<h2>Your classes</h2>"+'<div class="actions vnext-small-actions"><button class="secondary" data-action="manual-open">Forgot timer? Add time</button><button class="secondary" data-nav="classes">Edit classes</button></div></div>'+'<div class="class-grid">';
 classes().forEach((c,i)=>{s+='<button class="class-button" data-class="'+i+'">'+"<strong>"+esc(c.name)+"</strong><span>"+esc(lastChecked(c.name))+"</span></button>";
 });
 root.innerHTML=s+"</div></section>";
 maybePrompt();
 }
-function renderClasses(){root.innerHTML=(classes().length?'':'<section class="notice"><h2>Already used this tracker?</h2><p>You do not need to add your classes again. Recover your saved history with your code, or restore your exported backup file.</p><button class="primary" data-nav="backup">Recover my classes & history</button><p class="small">This works in Chrome on a Chromebook. Use your regular school profile and bookmark this page.</p></section>')+'<section class="card">'+'<span class="eyebrow">SAVED ON THIS DEVICE</span>'+"<h2>Set up your classes</h2>"+'<p class="muted">'+"Add once; choose them for future study visits.</p>"+'<label class="field" for="subject">Subject</label>'+'<select id="subject">'+'<option value="">Choose a subject</option>'+Object.keys(catalog).map(x=>"<option>"+esc(x)+"</option>").join("")+"</select>"+'<label class="field" for="course">Class</label>'+'<select id="course">'+'<option value="">Choose a subject first</option>'+"</select>"+'<div id="customWrap" hidden>'+'<label class="field" for="custom">Your class name</label>'+'<input id="custom" type="text" maxlength="100" '+'placeholder="Class name, not your name">'+"</div>"+'<div class="actions">'+'<button class="primary" data-action="add-class">'+"Add class</button></div></section>"+'<section class="card"><h3>Your saved classes</h3>'+classes().map((c,i)=>'<div class="saved-row"><div><strong>'+esc(c.name)+'</strong><div class="small">'+esc(c.subject)+"</div></div>"+'<button class="secondary" data-remove="'+i+'">Remove</button></div>').join("")+(classes().length?'<div class="actions">'+'<button class="primary" data-nav="home">'+"Done adding classes</button></div>":'<p class="muted">'+"Add at least one class to get started.</p>")+"</section>";
+function renderClasses(){root.innerHTML=(classes().length?'':'<section class="notice"><h2>Already used this tracker?</h2><p>You do not need to add your classes again. Recover your saved history with your code, or restore your exported backup file.</p><button class="primary" data-nav="backup">Recover my classes & history</button><p class="small">This works in Chrome on a Chromebook. Use your regular school profile and bookmark this page.</p></section>')+'<section class="card">'+'<span class="eyebrow">SAVED ON THIS DEVICE</span>'+"<h2>Set up your classes</h2>"+'<p class="muted">'+"Add once; choose them for future study visits. AP Seminar and AP Research are under AP Capstone; personal topics are under Independent Learning.</p>"+'<label class="field" for="subject">Subject</label>'+'<select id="subject">'+'<option value="">Choose a subject</option>'+Object.keys(catalog).map(x=>"<option>"+esc(x)+"</option>").join("")+"</select>"+'<label class="field" for="course">Class</label>'+'<select id="course">'+'<option value="">Choose a subject first</option>'+"</select>"+'<div id="customWrap" hidden>'+'<label class="field" for="custom">Your class name</label>'+'<input id="custom" type="text" maxlength="100" '+'placeholder="Class name, not your name">'+"</div>"+'<div class="actions">'+'<button class="primary" data-action="add-class">'+"Add class</button></div></section>"+'<section class="card"><h3>Your saved classes</h3>'+classes().map((c,i)=>'<div class="saved-row"><div><strong>'+esc(c.name)+'</strong><div class="small">'+esc(c.subject)+"</div></div>"+'<button class="secondary" data-remove="'+i+'">Remove</button></div>').join("")+(classes().length?'<div class="actions">'+'<button class="primary" data-nav="home">'+"Done adding classes</button></div>":'<p class="muted">'+"Add at least one class to get started.</p>")+"</section>";
 $("subject").onchange=()=>{$("course").innerHTML='<option value="">Choose a class</option>'+(catalog[$("subject").value]||[]).map(x=>"<option>"+esc(x)+"</option>").join("");
 $("customWrap").hidden=true;
 };
 $("course").onchange=()=>{$("customWrap").hidden=!$("course").value.startsWith("Other");
 };
 }
-function renderStages(){if(!chosenClass){screen="home";
-render();
-return;
+function renderStages(){
+  if(!chosenClass){screen="home";render();return;}
+  const hasOneClass=classes().length===1;
+  const advice=Pulse.advice(chosenClass.name);
+  const firstVisit=sessions().length===0&&localStorage.getItem(K.helpSeen)!=="1";
+  const help=firstVisit?
+    '<section class="card vnext-guide"><span class="eyebrow">FIRST STUDY VISIT</span>'+
+    '<h2>Three simple steps</h2>'+
+    '<p><strong>1.</strong> Choose Learn, Retrieval, or Assess. <strong>2.</strong> Use a method and save your time. '+
+    '<strong>3.</strong> Check Progress for one useful next step.</p>'+
+    '<p class="small">Retrieval means trying from memory. Crosscheck means comparing what you recalled with a reliable source and correcting a gap.</p>'+
+    '<button type="button" class="text-button" data-action="hide-guide">Got it — hide this guide</button></section>':"";
+  const due=ankiDue();
+  const ankiHint=due.length&&localStorage.getItem(K.ankiHide+today())!=="1"?
+    '<div class="vnext-inline-tip"><strong>Anki practice is due.</strong> Choose Assess → Anki when it fits your plan. '+
+    '<button type="button" class="text-button" data-action="hide-anki">Dismiss</button></div>':"";
+  root.innerHTML=
+    Pulse.banner()+help+
+    '<section class="card">'+
+      '<div class="section-head"><div><span class="eyebrow">STUDYING</span><h2>'+esc(chosenClass.name)+
+      '</h2></div><button class="secondary" data-nav="'+(hasOneClass?'classes':'home')+'">'+
+      (hasOneClass?'Edit classes':'Change class')+'</button></div>'+
+      (advice.count?
+        '<div class="coach"><h3>'+esc(advice.title)+'</h3><p>'+esc(advice.explanation)+
+        '</p><p><strong>Next:</strong> '+esc(advice.next)+'</p>'+
+        '<p class="small">'+esc(advice.caution)+'</p></div>':"")+
+      '<p class="muted">Choose any stage. These are options, not required steps.</p>'+
+      ankiHint+
+      '<div class="grid">'+[1,2,3].map(n=>
+        '<button type="button" class="stage-button '+(chosenStage===n?'selected':'')+
+        '" data-stage="'+n+'"><span>Stage '+n+'</span><strong>'+stages[n].name+
+        '</strong><span>'+stages[n].purpose+'</span></button>').join("")+'</div>'+
+      (chosenStage?
+        '<div class="stage-details"><h3>Choose your '+stages[chosenStage].name+
+        ' method</h3><div class="methods">'+stages[chosenStage].methods.map((m,i)=>
+          '<button type="button" class="method-button" data-method="'+i+'">'+esc(m)+'</button>').join("")+
+        '</div>'+(chosenStage===2?
+          '<p class="small"><strong>After Retrieval:</strong> Crosscheck your answer using notes or a trusted source, then correct what you missed.</p>':"")+
+        '</div>':"")+
+      '<div class="actions"><button type="button" class="secondary" data-action="manual-open">'+
+      'Forgot to start the timer? Add study time</button></div>'+
+    '</section>';
 }
-const ws=C.weekStart(today());
-const sum=C.summarize(C.forClassWeek(sessions(),chosenClass.name,ws));
-const recent=latestReflection(chosenClass.name);
-const advice=recent&&recent.recommendation?recent.recommendation:C.recommend(sum);
-root.innerHTML='<section class="card">'+'<div class="section-head"><div>'+'<span class="eyebrow">STUDYING</span><h2>'+esc(chosenClass.name)+"</h2></div>"+'<button class="secondary" data-nav="home">'+"Change class</button></div>"+(recent?feedbackHtml(recent,true):sum.count?'<div class="coach"><h3>'+esc(advice.title)+"</h3><p>"+esc(advice.text)+"</p></div>":"")+'<p class="muted">'+"Choose any stage. The suggestions are options, "+"not a required sequence.</p>"+'<div class="grid">'+[1,2,3].map(n=>'<button class="stage-button '+(chosenStage===n?"selected":"")+'" data-stage="'+n+'">'+"<span>Stage "+n+"</span>"+"<strong>"+stages[n].name+"</strong>"+"<span>"+stages[n].purpose+"</span>"+"</button>").join("")+"</div>"+(chosenStage?'<div class="stage-details"><h3>Choose your '+stages[chosenStage].name+' method</h3><div class="methods">'+stages[chosenStage].methods.map((m,i)=>'<button class="method-button" data-method="'+i+'">'+esc(m)+"</button>").join("")+"</div></div>":"")+"</section>";
+function renderManual(){
+  if(active){message("Finish the active timer before recording another session.");screen="timer";render();return;}
+  const list=classes();
+  if(!list.length){screen="classes";render();return;}
+  const chosen=chosenClass&&list.some(c=>c.name===chosenClass.name)?chosenClass.name:list[0].name;
+  const minimum=C.addDays(today(),-14);
+  root.innerHTML=
+    '<section class="card vnext-manual">'+
+    '<span class="eyebrow">MISSED A TIMER?</span><h2>Add a study session</h2>'+
+    '<p>This is for study you actually completed without a timer. It will be labeled <strong>student-reported</strong> '+
+    'in your log and in the teacher spreadsheet. Timed records are unchanged.</p>'+
+    '<label class="field" for="manualClass">Class</label>'+
+    '<select id="manualClass">'+list.map(c=>
+      '<option value="'+esc(c.name)+'"'+(c.name===chosen?' selected':'')+'>'+esc(c.name)+'</option>').join("")+'</select>'+
+    '<label class="field" for="manualDate">When did you study?</label>'+
+    '<input id="manualDate" type="date" min="'+minimum+'" max="'+today()+'" value="'+today()+'" required>'+
+    '<label class="field" for="manualStage">What did you do?</label>'+
+    '<select id="manualStage" required><option value="">Choose a stage</option>'+
+    [1,2,3].map(n=>'<option value="'+n+'">'+n+' — '+stages[n].name+'</option>').join("")+'</select>'+
+    '<label class="field" for="manualMethod">Study method</label>'+
+    '<select id="manualMethod" required><option value="">Choose a stage first</option></select>'+
+    '<label class="field" for="manualMinutes">Actual study minutes (1–240)</label>'+
+    '<input id="manualMinutes" type="number" min="1" max="240" step="1" inputmode="numeric" required>'+
+    '<div id="manualCrossWrap" hidden>'+
+    '<label class="field" for="manualCross">Crosscheck minutes (optional, 0–120)</label>'+
+    '<input id="manualCross" type="number" min="0" max="120" step="1" inputmode="numeric" value="0">'+
+    '<p class="small">Only count the time you actually compared and corrected what you recalled.</p></div>'+
+    '<p class="small">You can enter a missed session from the past 14 days. Do not include breaks. '+
+    'This record cannot verify how long you studied.</p>'+
+    '<div class="actions"><button class="primary" type="button" data-action="manual-save">Save student-reported time</button>'+
+    '<button class="secondary" type="button" data-action="manual-cancel">Cancel</button></div></section>';
+  $('manualStage').onchange=()=>{
+    const st=Number($('manualStage').value);
+    $('manualMethod').innerHTML='<option value="">Choose a method</option>'+
+      (stages[st]?.methods||[]).map(m=>'<option value="'+esc(m)+'">'+esc(m)+'</option>').join("");
+    $('manualCrossWrap').hidden=st!==2;
+  };
+}
+function saveManual(){
+  if(active)throw new Error("Finish your active timer before entering missed time.");
+  const list=classes();
+  const name=$('manualClass')?.value||"";
+  const chosen=list.find(c=>c.name===name);
+  const day=$('manualDate')?.value||"";
+  const stage=Number($('manualStage')?.value);
+  const method=$('manualMethod')?.value||"";
+  const minutes=Number($('manualMinutes')?.value);
+  const cross=stage===2?Number($('manualCross')?.value||0):0;
+  if(!chosen)throw new Error("Choose a saved class.");
+  if(!C.validDate(day)||day>today()||day<C.addDays(today(),-14))throw new Error("Choose a date from the last 14 days.");
+  if(!stages[stage]||!stages[stage].methods.includes(method))throw new Error("Choose a stage and study method.");
+  if(!Number.isInteger(minutes)||minutes<1||minutes>240)throw new Error("Enter 1–240 whole minutes of actual study.");
+  if(!Number.isInteger(cross)||cross<0||cross>120)throw new Error("Crosscheck must be 0–120 whole minutes.");
+  const stamp=new Date().toISOString();
+  const row={
+    id:uid(),visitId:"",startedAt:"",timestamp:stamp,localDate:day,
+    className:chosen.name,subject:chosen.subject,stage,
+    stageName:C.stageName(stage),method,
+    studySeconds:minutes*60,crosscheckSeconds:cross*60,
+    totalSeconds:(minutes+cross)*60,
+    entrySource:"manual",manualEntry:true
+  };
+  // Persist first: if Google is offline or unavailable, keep it in the local outbox.
+  persistRecord(row);
+  completed=row;
+  chosenClass=chosen;
+  chosenStage=stage;
+  screen="complete";
+  render();
+  message("Student-reported time saved on this device. The sync status shows when Google confirms it.");
 }
 function openTimer(method){if(active)return;
 if(method==="Anki"){chosenStage=3;
@@ -1005,7 +1345,7 @@ screen="timer";
 render();
 }
 function renderTimer(){const cross=active.phase==="crosscheck";
-root.innerHTML='<section class="card timer">'+'<span class="eyebrow">'+esc(active.className)+"</span><h2>"+(cross?"Crosscheck":"Stage "+active.stage+" — "+C.stageName(active.stage))+"</h2><h3>"+esc(active.method)+'</h3><p class="muted">'+(cross?"Your Retrieval is already saved. Compare it with notes or another "+"reliable source, correct gaps, then consider a short Assess.":stages[active.stage].instruction)+"</p>"+awayHtml()+'<div id="clock" class="clock" role="timer" '+'aria-label="Elapsed study time">'+time(elapsed()/1000)+"</div>"+'<div class="actions">'+'<button class="primary" data-action="toggle-timer">'+(active.runningSince!==null?"Pause":active.ms>0?"Resume":cross?"Start Crosscheck":"Start")+"</button>"+(active.startedAt||cross?'<button class="secondary" data-action="finish-timer">'+(cross?"Finish Crosscheck":"Finish stage")+"</button>":"")+'<button class="text-button" data-action="'+(cross?"skip-crosscheck":"cancel-timer")+'">'+(cross?"Skip Crosscheck for now":"Cancel stage")+"</button></div>"+'<p class="small">'+"The timer keeps counting with the screen off and after reopening this browser. Press Pause when you stop studying; closing the tab does not pause it."+"</p></section>";
+root.innerHTML='<section class="card timer">'+'<span class="eyebrow">'+esc(active.className)+"</span><h2>"+(cross?"Crosscheck":"Stage "+active.stage+" — "+C.stageName(active.stage))+"</h2><h3>"+esc(active.method)+'</h3><p class="muted">'+(cross?"Your Retrieval is saved. Open your notes or a reliable source, compare it with what you recalled, and correct one specific gap. Then you can choose a short independent Assess activity.":stages[active.stage].instruction)+"</p>"+awayHtml()+'<div id="clock" class="clock" role="timer" '+'aria-label="Elapsed study time">'+time(elapsed()/1000)+"</div>"+'<div class="actions">'+'<button class="primary" data-action="toggle-timer">'+(active.runningSince!==null?"Pause":active.ms>0?"Resume":cross?"Start Crosscheck":"Start")+"</button>"+(active.startedAt||cross?'<button class="secondary" data-action="finish-timer">'+(cross?"Finish Crosscheck":"Finish stage")+"</button>":"")+'<button class="text-button" data-action="'+(cross?"skip-crosscheck":"cancel-timer")+'">'+(cross?"Skip Crosscheck for now":"Cancel stage")+"</button></div>"+'<p class="small">'+"The timer keeps counting with the screen off and after reopening this browser. Press Pause when you stop studying; closing the tab does not pause it."+"</p></section>";
 }
 function persistRecord(record){const rows=sessions();
 const i=rows.findIndex(r=>(r.id&&r.id===record.id)||r.timestamp===record.timestamp);
@@ -1058,7 +1398,7 @@ render();
 return;
 }
 const next=completed.stage===1?"Retrieve What You Remember":completed.stage===2?"Test Yourself Now":"Choose Another Stage";
-root.innerHTML='<section class="card">'+'<span class="eyebrow">SAVED ON THIS DEVICE</span>'+"<h2>Stage "+completed.stage+" — "+C.stageName(completed.stage)+" complete</h2>"+"<p><strong>"+esc(completed.className)+"</strong> · "+esc(completed.method)+" · "+human(completed.studySeconds)+(completed.crosscheckSeconds?" + "+human(completed.crosscheckSeconds)+" Crosscheck":"")+"</p>"+'<div class="coach"><h3>'+next+"</h3><p>"+(completed.stage===2?"Ready to continue? Try a short independent practice test, "+"problems, or Anki after your Crosscheck.":"Continue only if it serves your learning goal. "+"You can also finish now.")+"</p></div>"+'<div class="actions">'+'<button class="primary" data-action="next-stage">'+next+"</button>"+'<button class="secondary" data-action="finish-visit">'+"Finish studying</button></div></section>";
+root.innerHTML='<section class="card">'+(completed.entrySource==="manual"?'<span class="eyebrow">STUDENT-REPORTED ENTRY · SAVED ON THIS DEVICE</span>':'<span class="eyebrow">SAVED ON THIS DEVICE</span>')+"<h2>Stage "+completed.stage+" — "+C.stageName(completed.stage)+" complete</h2>"+"<p><strong>"+esc(completed.className)+"</strong> · "+esc(completed.method)+" · "+human(completed.studySeconds)+(completed.crosscheckSeconds?" + "+human(completed.crosscheckSeconds)+" Crosscheck":"")+"</p>"+'<div class="coach"><h3>'+next+"</h3><p>"+(completed.stage===2?"Ready to continue? Try a short independent practice test, "+"problems, or Anki after your Crosscheck.":"Continue only if it serves your learning goal. "+"You can also finish now.")+"</p></div>"+'<div class="actions">'+'<button class="primary" data-action="next-stage">'+next+"</button>"+'<button class="secondary" data-action="finish-visit">'+"Finish studying</button></div></section>";
 }
 const MP_COLORS={learn:"#2A78D6",retrieval:"#EB6834",crosscheck:"#6250D6",assess:"#1BAF7A",grid:"#D7DEE5",ink:"#5F7285"};
 function mpLatestRefs(){const latest=new Map();
@@ -1212,8 +1552,9 @@ function renderStudyLog(){
     '<label class="field" for="logClass">Class</label><select id="logClass"><option value="">All classes</option>'+names.map(n=>'<option value="'+esc(n)+'"'+(logClass===n?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select>'+
     '<label class="field" for="logWeek">Week</label><select id="logWeek"><option value="">All weeks</option>'+weeks.map(w=>'<option value="'+w+'"'+(logWeek===w?' selected':'')+'>'+esc(rangeLabel(w))+'</option>').join('')+'</select>'+
     '<p role="status">'+selected.length+' completed stages · '+human(selected.reduce((n,r)=>n+C.number(r.studySeconds)+C.number(r.crosscheckSeconds),0))+' total</p>'+
-    (rows.length?'<div class="table-wrap" style="overflow-x:auto"><table><caption>Completed study stages. Crosscheck is shown separately.</caption><thead><tr><th scope="col">Date</th><th scope="col">Class</th><th scope="col">Stage / method</th><th scope="col">Study time</th><th scope="col">Crosscheck</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(pretty(C.localDay(r)))+'</td><td>'+esc(r.className)+'</td><td>'+esc(C.stageName(Number(r.stage)))+'<br>'+esc(r.method)+(r.recoveredArchive?'<br><span class="small">Recovered history</span>':'')+'</td><td>'+human(C.number(r.studySeconds))+'</td><td>'+human(C.number(r.crosscheckSeconds))+'</td></tr>').join('')+'</tbody></table></div>':'<p>No completed stages match this selection. If you studied on another device, recover that history before adding your classes again.</p>')+
-    '<div class="actions"><button class="secondary" data-action="log-prev"'+(logPage===0?' disabled':'')+'>Previous</button><span>Page '+(logPage+1)+' of '+pages+'</span><button class="secondary" data-action="log-next"'+(logPage+1>=pages?' disabled':'')+'>Next</button></div><button class="text-button" data-nav="backup">Backup & Recovery</button></section>';
+    (rows.length?'<div class="table-wrap" style="overflow-x:auto"><table><caption>Completed study stages. Crosscheck is shown separately.</caption><thead><tr><th scope="col">Date</th><th scope="col">Class</th><th scope="col">Stage / method</th><th scope="col">Study time</th><th scope="col">Crosscheck</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(pretty(C.localDay(r)))+'</td><td>'+esc(r.className)+'</td><td>'+esc(C.stageName(Number(r.stage)))+'<br>'+esc(r.method) +(r.entrySource==="manual"?'<br><span class="vnext-report-label">Student-reported time</span>':'')+
+    (r.recoveredArchive?'<br><span class="small">Recovered history</span>':'')+'</td><td>'+human(C.number(r.studySeconds))+'</td><td>'+human(C.number(r.crosscheckSeconds))+'</td></tr>').join('')+'</tbody></table></div>':'<p>No completed stages match this selection. If you studied on another device, recover that history before adding your classes again.</p>')+
+    '<div class="actions"><button class="secondary" data-action="manual-open">Add missed study time</button><button class="secondary" data-action="log-prev"'+(logPage===0?' disabled':'')+'>Previous</button><span>Page '+(logPage+1)+' of '+pages+'</span><button class="secondary" data-action="log-next"'+(logPage+1>=pages?' disabled':'')+'>Next</button></div><button class="text-button" data-nav="backup">Backup & Recovery</button></section>';
   $('logClass').onchange=()=>{logClass=$('logClass').value;logPage=0;renderStudyLog();};
   $('logWeek').onchange=()=>{logWeek=$('logWeek').value;logPage=0;renderStudyLog();};
 }
@@ -1329,12 +1670,7 @@ if(!dialog.open){dialog.showModal();
 }
 dialog.addEventListener("cancel",()=>{reminderDismissed=true;
 });
-function maybePrompt(){if(screen!=="home"||active||dialog.open||reminderDismissed||!pending().length){return;
-}
-setTimeout(()=>{if(!active&&screen==="home"&&!dialog.open&&!reminderDismissed){openReflection();
-}
-},80);
-}
+function maybePrompt(){/* No modal reminders: learning pulse lives as a dismissible Study card. */}
 function enqueue(key,payload){const queue=read(K.queue,[]);
 const fingerprint=JSON.stringify(payload);
 const receipt=read(K.sync,{});
@@ -1364,7 +1700,7 @@ function updateSync(){let queue=[];
 try{queue=read(K.queue,[]);
 }catch(e){return;
 }
-$("syncStatus").textContent=syncBusy?"Sending saved data…":queue.length?queue.length+" item"+(queue.length===1?"":"s")+" saved locally; waiting for Google confirmation."+(lastError?" "+lastError:""):"New uploads are up to date. "+"Your study history stays saved on this device.";
+$("syncStatus").textContent=syncBusy?"Sending saved data…":queue.length?queue.length+" item"+(queue.length===1?"":"s")+" saved locally; waiting for Google confirmation."+(lastError?" "+lastError:""):"Google has confirmed queued study uploads. Your records also stay on this device; check Backup & Recovery for separate cloud-backup status.";
 }
 function post(payload){return new Promise((resolve,reject)=>{const endpoint=window.STUDY_TRACKER_WEEKLY_ENDPOINT;
 if(!endpoint){reject(new Error("Backend URL missing."));
@@ -1515,6 +1851,22 @@ write(K.classes,mergedClasses);
 write(K.sessions,mergedSessions);
 write(K.history,mergedHistory);
 write(K.reflections,mergedRefs);
+const importedPulses=parsed(K.pulses)||{};
+if(importedPulses&&typeof importedPulses==="object"&&!Array.isArray(importedPulses)){
+  const own=Pulse.all();
+  Object.entries(importedPulses).forEach(([w,r])=>{
+    if(r&&C.validDate(w)&&(!own[w]||String(r.timestamp)>String(own[w].timestamp)))own[w]=r;
+  });
+  write(K.pulses,own);
+}
+const importedPulseSchedule=parsed(K.pulseSchedule);
+if(importedPulseSchedule&&C.validDate(importedPulseSchedule.nextDueWeek)){
+  const existingPulseSchedule=read(K.pulseSchedule,null);
+  if(!existingPulseSchedule||
+    String(importedPulseSchedule.lastRespondedWeek||"")>String(existingPulseSchedule.lastRespondedWeek||"")){
+    write(K.pulseSchedule,importedPulseSchedule);
+  }
+}
 if(oldId){rawWrite(K.device,oldId);
 }
 Object.entries(b.data).forEach(([k,v])=>{if(k.startsWith(K.ankiDone)&&v==="1"){rawWrite(k,v);
@@ -1525,6 +1877,7 @@ rawWrite(K.start,start&&start<b.data[K.start]?start:b.data[K.start]);
 }
 mergedSessions.filter(r=>r.id).forEach(queueStage);
 Object.values(mergedHistory).filter(r=>r.revisionId&&r.recommendation&&r.snapshot).forEach(queueReflection);
+Object.values(Pulse.all()).forEach(Pulse.queuePulse);
 message("Backup merged. Your existing records were retained.");
 render();
 }catch(err){message(err.message);
@@ -1533,7 +1886,7 @@ e.target.value="";
 };
 function init(){recoverMissingClasses();
 const versionLabel=document.getElementById("coachVersion");
-if(versionLabel){versionLabel.textContent="Learning-first coaching · "+CoachRules.version+" · my-progress-20261012-5 · recovery-20261012-2 · auto-stop-20261023-3";
+if(versionLabel){versionLabel.textContent="Learning-first coaching · "+CoachRules.version+" · my-progress-20261012-5 · recovery-20261012-2 · learning-pulse-20261105-3 · timer-blocks-20261105-1 · usability-20261105-1";
 }
 classes();
 sessions();
@@ -1573,6 +1926,7 @@ message(active.awayPrompt?"You were away from a running timer. Choose how much o
 render();
 sessions().filter(r=>r.id).forEach(queueStage);
 historyList().filter(r=>r.revisionId&&r.recommendation&&r.snapshot).forEach(queueReflection);
+Object.values(Pulse.all()).forEach(Pulse.queuePulse);
 syncQueue();
 scheduleRecovery();recoveryBanner();
 }
@@ -1603,9 +1957,16 @@ if(b.dataset.method!==undefined){openTimer(stages[chosenStage].methods[Number(b.
 return;
 }
 if(b.dataset.remove!==undefined){const list=classes();
-list.splice(Number(b.dataset.remove),1);
+const index=Number(b.dataset.remove);
+const item=list[index];
+if(!item)return;
+const hasHistory=sessions().some(r=>r.className===item.name);
+if(!confirm("Remove "+item.name+" from the class menu? "+
+  (hasHistory?"Its study history will remain in the Study Log, and you can add the class again.":"You can add it again later.")))return;
+list.splice(index,1);
 write(K.classes,list);
 render();
+message("Class removed from the menu. Existing study records were not deleted.");
 return;
 }
 if(b.dataset.period){periodKind=b.dataset.period;
@@ -1613,7 +1974,7 @@ periodKey=periodKind==="week"?C.weekStart(today()):C.monthStart(today());
 render();
 return;
 }
-if(b.dataset.reflectionClass){openReflection({className:b.dataset.reflectionClass,weekStart:b.dataset.week});
+if(b.dataset.reflectionClass){message("The old two-rating check-in has been replaced by one learning question when your next review is due.");
 return;
 }
 if(b.dataset.coachClass){if(dialog.open){dialog.close();
@@ -1626,7 +1987,13 @@ screen="stage";
 render();
 return;
 }
-switch(b.dataset.action){case"add-class":{const subject=$("subject").value;
+switch(b.dataset.action){
+ case"hide-guide":rawWrite(K.helpSeen,"1");render();break;
+ case"manual-open":if(active){message("Finish your current timer before entering another session.");break;}
+   screen="manual";render();break;
+ case"manual-save":saveManual();break;
+ case"manual-cancel":screen=chosenClass?"stage":"home";render();break;
+ case"add-class":{const subject=$("subject").value;
 const course=$("course").value;
 const name=course.startsWith("Other")?$("custom").value.trim():course;
 if(!subject||!name){message("Choose a subject and class.");
@@ -1636,6 +2003,7 @@ const list=classes();
 if(!list.some(c=>c.name.toLowerCase()===name.toLowerCase())){list.push({name,subject});
 }
 write(K.classes,list);
+if(list.length===1){chosenClass=list[0];chosenStage=null;visitId=uid();screen="stage";}
 message("Class saved.");
 render();
 break;
@@ -1683,8 +2051,10 @@ reminderDismissed=false;
 screen="home";
 render();
 break;
-case"reflect":openReflection();
+case"reflect":message("The old weekly ratings were retired. Your one-question learning check appears on Study when due.");
 break;
+case"pulse-yes":case"pulse-no":case"pulse-unsure":{const answer=b.dataset.action.slice(6);const response=Pulse.saveAnswer(answer);render();message("Learning check saved on this device. Next check-in: week of "+response.nextDueWeek+". Sync will follow.");break;}
+case"pulse-later":Pulse.dismiss();render();break;
 case"weekly-share":shareWeek();
 break;
 case"protect-storage":protectStorage();
@@ -1740,305 +2110,485 @@ if([K.classes,K.sessions,K.reflections].includes(e.key)&&!active&&!dialog.open){
 }
 }));
 
-  // ================================================================
-  // STUDY COACH TIMER SAFETY — auto-stop-20261023-3
-  // Paste ONCE in place of the final "bootApp();" line.
-  // Existing records, coaching, recovery and Progress are not replaced.
-  // ================================================================
+
+// VNext presentation adapter: keep the existing focused graphs/share button,
+// but replace stale rating-dependent labels with a single activity-based next step.
+(function installPulseProgressAdapter() {
+  let queued=false;
+  function periodBounds() {
+    const chosen=root.querySelector('[data-fp-period][aria-selected="true"]');
+    const key=chosen?chosen.getAttribute("data-fp-period"):"this-week";
+    const now=today(),w=C.weekStart(now),m=C.monthStart(now);
+    if(key==="last-week")return [C.addDays(w,-7),w];
+    if(key==="this-month")return [m,C.nextMonth(m)];
+    if(key==="prior-month") {
+      const prior=C.addDays(m,-1),start=C.monthStart(prior);
+      return [start,C.nextMonth(start)];
+    }
+    return [w,C.addDays(w,7)];
+  }
+  function update() {
+    const header=root.querySelector("[data-focused-progress]");
+    if(!header) return;
+    const bounds=periodBounds();
+    if(!root.querySelector("[data-pulse-overview]")) {
+      const p=document.createElement("section");
+      p.className="card";
+      p.dataset.pulseOverview="yes";
+      const pulseText=Pulse.latestSummary();
+      p.innerHTML='<span class="eyebrow">YOUR LEARNING CHECK</span>'+
+        '<p class="small">'+esc(pulseText||"Your first one-question review is due after two completed weeks of use. In between, suggestions come from your study log.")+'</p>'+
+        '<p class="small">Suggestions are based on recorded activity, not guaranteed learning or grades.</p>';
+      header.after(p);
+    }
+    if(!header.querySelector("[data-action='manual-open']")){
+      const manual=document.createElement("button");
+      manual.type="button";manual.className="secondary vnext-progress-manual";
+      manual.dataset.action="manual-open";manual.textContent="Add missed study time";
+      header.appendChild(manual);
+    }
+    root.querySelectorAll(".fp-class-card").forEach(card=>{
+      const name=card.querySelector(".fp-card-head h2")?.textContent.trim();
+      if(!name)return;
+      const a=Pulse.advice(name,bounds[0],bounds[1]);
+      const manuallyReported=Pulse.studyRows(bounds[0],bounds[1])
+        .filter(r=>r.className===name&&r.entrySource==="manual")
+        .reduce((n,r)=>n+C.number(r.studySeconds)+C.number(r.crosscheckSeconds),0);
+      const coach=card.querySelector(".fp-coach");
+      if(coach) {
+        const content='<span class="fp-verdict">'+esc(a.title)+'</span>'+
+          '<p>'+esc(a.explanation)+'</p>'+
+          '<p class="fp-next"><strong>Next:</strong> '+esc(a.next)+'</p>'+
+          (manuallyReported?'<p class="small"><strong>Time source:</strong> '+
+            human(manuallyReported)+' of the recorded time was entered by the student after studying.</p>':"")+
+          '<p class="small">'+esc(a.caution)+'</p>';
+        if(coach.innerHTML!==content)coach.innerHTML=content;
+      }
+      const actions=card.querySelector(".fp-actions");
+      if(!actions)return;
+      if(!card.querySelector("[data-vnext-details]")){
+        const details=document.createElement("button");
+        details.type="button";
+        details.className="secondary vnext-details-toggle";
+        details.dataset.vnextDetails="1";
+        details.textContent="Show study pattern and time breakdown";
+        details.setAttribute("aria-expanded","false");
+        card.appendChild(details);
+      }
+      actions.querySelectorAll("[data-reflection-class]").forEach(button=>button.remove());
+      const buttons=[...actions.querySelectorAll("button[data-coach-class]")];
+      buttons.slice(1).forEach(button=>button.remove());
+      let button=buttons[0]||null;
+      if(a.stage && !button){
+        button=document.createElement("button");
+        button.type="button";
+        button.className="primary";
+        button.textContent="Start this step";
+        const share=actions.querySelector("[data-fp-share]");
+        actions.insertBefore(button,share||null);
+      }
+      if(button){
+        if(!a.stage){button.remove();return;}
+        if(button.dataset.coachClass!==name)button.dataset.coachClass=name;
+        if(button.dataset.coachStage!==String(a.stage))button.dataset.coachStage=String(a.stage);
+      }
+    });
+  }
+  // Use the same activity-led advice in sharing as in the visible Progress card.
+  // The legacy focused-progress.js share snapshot still holds a rating-era
+  // internal coaching object, so its text/image would otherwise contradict the UI.
+  document.addEventListener("click",function(event) {
+    const toggle=event.target.closest("button[data-vnext-details]");
+    if(toggle && root.contains(toggle)){
+      const card=toggle.closest(".fp-class-card");
+      if(card){
+        const opened=card.classList.toggle("vnext-expanded");
+        toggle.setAttribute("aria-expanded",String(opened));
+        toggle.textContent=opened?"Hide study pattern and time breakdown":"Show study pattern and time breakdown";
+      }
+      return;
+    }
+    const button=event.target.closest("button[data-fp-share]");
+    if(!button || !root.contains(button) || !root.querySelector("[data-focused-progress]")) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const name=String(button.dataset.fpShare||"");
+    if(!name) return;
+    const bounds=periodBounds();
+    const rows=Pulse.studyRows(bounds[0],bounds[1]).filter(r=>r.className===name);
+    const sum=C.summarize(rows);
+    const a=Pulse.advice(name,bounds[0],bounds[1]);
+    const manuallyReported=rows.filter(r=>r.entrySource==="manual")
+      .reduce((n,r)=>n+C.number(r.studySeconds)+C.number(r.crosscheckSeconds),0);
+    const mins=n=>Math.round((Number(n)||0)/60)+" min";
+    const title="Study Coach Progress — "+name;
+    const text=[
+      title,
+      "Period: "+bounds[0]+" to "+C.addDays(bounds[1],-1),
+      "Recorded study: "+mins(sum.seconds),
+      "Learn: "+mins(sum.stages[1].seconds),
+      "Retrieval: "+mins(sum.stages[2].seconds),
+      "Crosscheck: "+mins(sum.crossSeconds),
+      "Assess: "+mins(sum.stages[3].seconds),
+      manuallyReported?"Student-reported after studying: "+mins(manuallyReported):"",
+      "",
+      a.title,
+      a.explanation,
+      "Next: "+a.next,
+      "",
+      a.caution
+    ].join("\n");
+    const email=()=>{window.location.href="mailto:?subject="+
+      encodeURIComponent(title)+"&body="+encodeURIComponent(text);};
+    function snapshotFile(){
+      // A small self-contained image: unlike the legacy snapshot, its
+      // recommendation exactly matches the activity-led text on screen.
+      try {
+        const canvas=document.createElement("canvas");
+        canvas.width=1080;canvas.height=1170;
+        const ctx=canvas.getContext("2d");if(!ctx)return null;
+        ctx.fillStyle="#ffffff";ctx.fillRect(0,0,1080,1170);
+        ctx.fillStyle="#17344d";ctx.fillRect(0,0,1080,210);
+        ctx.fillStyle="#ffffff";ctx.font="700 47px Arial";
+        ctx.fillText("STUDY COACH",58,82);
+        ctx.font="400 29px Arial";
+        ctx.fillText(name.slice(0,42),58,143);
+        ctx.font="400 22px Arial";
+        ctx.fillText(bounds[0]+" to "+C.addDays(bounds[1],-1),58,183);
+        const values=[
+          ["Learn",Math.max(0,Number(sum.stages[1].seconds)||0),"#2A78D6"],
+          ["Retrieval",Math.max(0,Number(sum.stages[2].seconds)||0),"#EB6834"],
+          ["Crosscheck",Math.max(0,Number(sum.crossSeconds)||0),"#6250D6"],
+          ["Assess",Math.max(0,Number(sum.stages[3].seconds)||0),"#1BAF7A"]
+        ];
+        let y=275;
+        ctx.font="700 27px Arial";ctx.fillStyle="#17344d";
+        ctx.fillText("RECORDED TIME",58,y);
+        y+=52;
+        const maximum=Math.max(1,...values.map(x=>x[1]));
+        values.forEach(([label,seconds,color])=>{
+          ctx.fillStyle="#17344d";ctx.font="700 24px Arial";
+          ctx.fillText(label,58,y+19);
+          ctx.font="400 24px Arial";
+          ctx.fillText(mins(seconds),830,y+19);
+          ctx.fillStyle="#e8eef4";ctx.fillRect(250,y,525,24);
+          ctx.fillStyle=color;ctx.fillRect(250,y,525*seconds/maximum,24);
+          y+=69;
+        });
+        y+=24;
+        ctx.fillStyle="#eff5fa";ctx.fillRect(40,y-19,1000,380);
+        ctx.fillStyle="#17344d";ctx.font="700 29px Arial";
+        ctx.fillText("YOUR NEXT STEP",68,y+28);
+        function wrap(value,start,maxLines){
+          ctx.font="400 27px Arial";
+          const words=String(value||"").split(/\\s+/);
+          let line="",ln=0;
+          for(const word of words){
+            const test=line?line+" "+word:word;
+            if(line&&ctx.measureText(test).width>920){
+              ctx.fillText(line,68,start+ln*41);ln++;
+              if(ln>=maxLines)return start+ln*41;
+              line=word;
+            }else line=test;
+          }
+          if(line&&ln<maxLines){ctx.fillText(line,68,start+ln*41);ln++;}
+          return start+ln*41;
+        }
+        const afterTitle=wrap(a.title+" — "+a.explanation,y+87,4);
+        wrap("Next: "+a.next,afterTitle+15,4);
+        ctx.font="400 22px Arial";ctx.fillStyle="#5f7285";
+        ctx.fillText(manuallyReported?"Includes "+mins(manuallyReported)+" entered by student after studying.":"Recorded time is not verified proof of learning.",58,1095);
+        ctx.fillText("Learn → Retrieval → Crosscheck → Assess",58,1132);
+        const data=canvas.toDataURL("image/png").split(",")[1];
+        const bytes=Uint8Array.from(atob(data),c=>c.charCodeAt(0));
+        const filename=("study-coach-"+name).replace(/[^a-z0-9_-]+/gi,"-").slice(0,80)+".png";
+        return new File([bytes],filename,{type:"image/png"});
+      }catch(error){console.warn("Study Coach snapshot:",error);return null;}
+    }
+    if(navigator.share) {
+      // Generate the snapshot synchronously within the actual click;
+      // fall back to text sharing if file sharing is unavailable.
+      const image=snapshotFile();
+      const payload={title,text};
+      try {
+        if(image && typeof navigator.canShare==="function" &&
+           navigator.canShare({files:[image]}))payload.files=[image];
+      }catch(_){}
+      Promise.resolve(navigator.share(payload)).catch(error=>{
+        if(!error||error.name!=="AbortError") email();
+      });
+    } else {
+      email();
+    }
+  },true);
+
+  const observer=new MutationObserver(()=>{
+    if(queued)return;
+    queued=true;
+    requestAnimationFrame(()=>{
+      queued=false;
+      try{update();}catch(error){console.warn("Learning pulse progress display:",error);}
+    });
+  });
+  observer.observe(root,{childList:true,subtree:true});
+})();
+
+  // 90-minute block safeguard. Confirmation, not an arbitrary maximum study length.
+  // A student can report genuine time beyond 90 minutes and continue in another block.
+  // The extra time is clearly marked as student-reported.
   {
-    const AUTO_LIMIT_MS = 90 * 60 * 1000;
-    const AUTO_WARN_MS = 75 * 60 * 1000;
+    const AUTO_LIMIT_MS = 90 * 60000;
+    const AUTO_WARN_MS = 75 * 60000;
+    const MAX_REPORTED_MINUTES = 240;
     let confirmingStop = null;
 
-    function timerAlert(title, body) {
-      try {
-        if (typeof Notification !== "undefined" &&
-            Notification.permission === "granted") {
-          new Notification(title, { body });
+    function timerAlert(title,body){
+      try{
+        if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+          new Notification(title,{body});
         }
-      } catch (_) {
-        // The on-screen message remains available.
-      }
+      }catch(_){}
     }
 
-    function stopIfOverdue() {
-      if (!active || active.autoStopped || confirmingStop ||
-          rawElapsed() < AUTO_LIMIT_MS) {
+    function currentBlockMs(){
+      if(!active)return 0;
+      const previous=Math.max(0,Number(active.confirmedMs)||0);
+      return Math.max(0,rawElapsed()-previous);
+    }
+
+    function stopIfOverdue(){
+      if(!active||active.autoStopped||confirmingStop||currentBlockMs()<AUTO_LIMIT_MS){
         return false;
       }
-
-      const earlierMs = Math.max(0, Number(active.ms) || 0);
-      const started = Number(active.runningSince) || Date.now();
-      const stoppedAt = Math.min(
-        Date.now(),
-        started + Math.max(0, AUTO_LIMIT_MS - earlierMs)
-      );
-
-      const leftAt = Number(active.awayAt) || 0;
-      const leftMs = Number(active.awayElapsed);
-      const wasAway = leftAt > 0 && leftAt < stoppedAt &&
-        Number.isFinite(leftMs) && leftMs >= 0;
-
-      active.autoStopAwayMinutes = wasAway
-        ? Math.max(0, Math.min(90, Math.floor(leftMs / 60000)))
+      const previouslyConfirmed=Math.max(0,Number(active.confirmedMs)||0);
+      const previouslyAccumulated=Math.max(0,(Number(active.ms)||0)-previouslyConfirmed);
+      const remaining=Math.max(0,AUTO_LIMIT_MS-previouslyAccumulated);
+      const stopTime=active.runningSince!==null
+        ? Math.min(Date.now(),(Number(active.runningSince)||Date.now())+remaining)
+        : Date.now();
+      const leftAt=Number(active.awayAt)||0;
+      const leftMs=Number(active.awayElapsed);
+      active.autoStopAwayMinutes=(leftAt>0 && Number.isFinite(leftMs))
+        ? Math.max(0,Math.min(90,Math.floor((leftMs-previouslyConfirmed)/60000)))
         : null;
-      active.autoStoppedAt = new Date(stoppedAt).toISOString();
-      active.autoStopped = true;
-      active.ms = AUTO_LIMIT_MS;
-      active.runningSince = null;
-      active.awayAt = null;
-      active.awayPrompt = null;
+      active.autoStoppedAt=new Date(stopTime).toISOString();
+      active.autoStopped=true;
+      active.autoStopEver=true;
+      active.ms=previouslyConfirmed+AUTO_LIMIT_MS;
+      active.runningSince=null;
+      active.awayAt=null;
+      active.awayPrompt=null;
       saveActive();
-
-      timerAlert(
-        "Study Coach: timer stopped",
-        "Open your app to confirm the minutes you actually studied."
-      );
-      message(
-        "Your timer stopped at 90 minutes. Confirm your actual study time before saving."
-      );
+      timerAlert("Study Coach timer stopped",
+        "Open Study Coach and confirm how many minutes you actually studied.");
+      message("Your timer reached its safety stop. Confirm your actual time; nothing new is saved yet.");
       return true;
     }
 
-    const originalReturn = checkReturn;
-    checkReturn = function () {
-      if (stopIfOverdue()) return;
+    const originalReturn=checkReturn;
+    checkReturn=function(){
+      if(stopIfOverdue())return;
       return originalReturn();
     };
 
-    const originalPause = pause;
-    pause = function () {
-      if (stopIfOverdue() || (active && active.autoStopped)) return;
+    const originalPause=pause;
+    pause=function(){
+      if(stopIfOverdue()||(active&&active.autoStopped))return;
       return originalPause();
     };
 
-    const originalStageItem = stageItem;
-    stageItem = function (record) {
-      const item = originalStageItem(record);
-      if (item && record.autoStopped) item.payload.autoStopped = "yes";
+    const originalStageItem=stageItem;
+    stageItem=function(record){
+      const item=originalStageItem(record);
+      if(item){
+         item.payload.entrySource=record.entrySource==="manual"?"manual":"timer";
+       }
+       if(item&&record.autoStopped)item.payload.autoStopped="yes";
+      if(item&&Number(record.reportedExtraSeconds)>0){
+        item.payload.reportedExtraSeconds=Math.floor(Number(record.reportedExtraSeconds));
+      }
       return item;
     };
 
-    const originalPersist = persistRecord;
-    persistRecord = function (record) {
-      if (confirmingStop && record.id === confirmingStop.id) {
-        record.autoStopped = true;
-        if (confirmingStop.phase === "study") {
-          record.timestamp = confirmingStop.stoppedAt;
-          record.localDate = C.dateKey(new Date(confirmingStop.stoppedAt));
-        } else {
-          record.crosscheckFinishedAt = confirmingStop.stoppedAt;
+    const originalPersist=persistRecord;
+    persistRecord=function(record){
+      if(active && (active.autoStopEver || confirmingStop) && record.id===active.id){
+        record.autoStopped=true;
+        record.reportedExtraSeconds=Math.max(0,Number(active.reportedExtraSeconds)||0);
+      }
+      if(confirmingStop&&record.id===confirmingStop.id){
+        if(confirmingStop.phase==="study"){
+          record.timestamp=confirmingStop.stoppedAt;
+          record.localDate=C.dateKey(new Date(confirmingStop.stoppedAt));
+        }else{
+          record.crosscheckFinishedAt=confirmingStop.stoppedAt;
         }
       }
       return originalPersist(record);
     };
 
-    const originalTimer = renderTimer;
-    renderTimer = function () {
-      if (!active) return;
+    const originalTimer=renderTimer;
+    renderTimer=function(){
+      if(!active)return;
       stopIfOverdue();
-
-      if (active.autoStopped) {
-        const cross = active.phase === "crosscheck";
-        const away = active.autoStopAwayMinutes;
-        const hint = away === null
-          ? "Enter the minutes you actually studied, not the time the timer displayed."
-          : "The app showed about " + away +
-            " minutes when you left it. Enter the actual minutes, including any work you continued elsewhere.";
-
-        root.innerHTML =
-          '<section class="card timer">' +
-          '<span class="eyebrow">' + esc(active.className) + '</span>' +
-          '<h2>Timer automatically stopped</h2>' +
-          '<p><strong>' + (cross ? "Crosscheck" :
-            "Stage " + active.stage + " — " + C.stageName(active.stage)) +
-          '</strong> · ' + esc(active.method) + '</p>' +
-          '<div class="notice" role="alert">' +
-          '<p>The 90-minute safety limit was reached. ' +
-          '<strong>No time from this unfinished timer phase has been added to Progress.</strong></p>' +
-          '<p>' + hint + '</p>' +
-          '<label for="actualStudyMinutes"><strong>Minutes actually studied (0–90)</strong></label>' +
-          '<input id="actualStudyMinutes" type="number" min="0" max="90" ' +
-          'step="1" inputmode="numeric" placeholder="Enter minutes" ' +
-          'style="display:block;width:100%;max-width:230px;margin:.5rem 0" />' +
-          '<p class="small">Enter 0 if you did not study during this timer phase.</p>' +
-          '<div class="actions">' +
-          '<button type="button" class="primary" data-timer-review="save">Save actual time</button>' +
-          '<button type="button" class="secondary" data-timer-review="' +
-          (cross ? "skip" : "discard") + '">' +
-          (cross ? "Skip Crosscheck" : "Discard this stage") +
-          '</button></div></div>' +
-          '<p class="small">This safety limit is not a study-time goal.</p>' +
+      if(active.autoStopped){
+        const cross=active.phase==="crosscheck";
+        const previous=Math.round(Math.max(0,Number(active.confirmedMs)||0)/60000);
+        const away=active.autoStopAwayMinutes;
+        const note=away===null
+          ? "Enter the actual time you studied, even if you forgot to stop the timer."
+          : "The app showed about "+away+" minutes before you left. Count only actual studying.";
+        root.innerHTML=
+          '<section class="card timer">'+
+          '<span class="eyebrow">'+esc(active.className)+'</span>'+
+          '<h2>Timer automatically stopped</h2>'+
+          '<p><strong>'+(cross?"Crosscheck":"Stage "+active.stage+" — "+C.stageName(active.stage))+
+          '</strong> · '+esc(active.method)+'</p>'+
+          '<div class="notice" role="alert">'+
+          '<p>The timer reached its 90-minute safety point. <strong>No time from this block has been saved.</strong></p>'+
+          (previous?'<p>'+previous+' minutes were already confirmed in an earlier block.</p>':"")+
+          '<p>'+note+'</p>'+
+          '<label for="actualStudyMinutes"><strong>Minutes actually studied in this block (0–'+MAX_REPORTED_MINUTES+')</strong></label>'+
+          '<input id="actualStudyMinutes" type="number" min="0" max="'+MAX_REPORTED_MINUTES+
+          '" step="1" inputmode="numeric" placeholder="Actual minutes" '+
+          'style="display:block;width:100%;max-width:240px;margin:.5rem 0">'+
+          '<p class="small">If you kept studying after the timer stopped, you can report the extra minutes. '+
+          'Any amount over 90 minutes for this block is marked as student-reported.</p>'+
+          '<div class="actions">'+
+          '<button type="button" class="primary" data-timer-review="save">Save and finish this block</button>'+
+          '<button type="button" class="secondary" data-timer-review="continue">Confirm and keep studying</button>'+
+          '<button type="button" class="text-button" data-timer-review="'+
+          (cross?"skip":"discard")+'">'+(cross?"Skip remaining Crosscheck":"Discard unfinished stage")+
+          '</button></div></div>'+
+          '<p class="small">Ninety minutes is a safety check, not a study goal or maximum.</p>'+
           '</section>';
         return;
       }
-
       originalTimer();
-      const card = root.querySelector("section.timer");
-      if (!card) return;
-
-      const note = document.createElement("p");
-      note.className = "small";
-      note.textContent =
-        "Safety stop: 90 minutes per timer phase. You will confirm actual time before an auto-stopped phase is saved.";
-      card.appendChild(note);
-
-      if (typeof Notification !== "undefined" &&
-          Notification.permission === "default") {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "text-button";
-        button.dataset.timerReview = "notifications";
-        button.textContent = "Enable timer notifications (optional)";
+      const card=root.querySelector("section.timer");
+      if(!card)return;
+      const footer=card.querySelector("p.small:last-child");
+      if(footer)footer.textContent="Safety check at 90 minutes per block. Confirm your actual time, then finish or continue studying.";
+      if(typeof Notification!=="undefined"&&Notification.permission==="default"){
+        const button=document.createElement("button");
+        button.type="button";button.className="text-button";
+        button.dataset.timerReview="notifications";
+        button.textContent="Enable timer notifications (optional)";
         card.appendChild(button);
       }
     };
 
-    const originalFinish = finishTimer;
-    finishTimer = function (skip = false) {
-      if (!active) return;
-      if (stopIfOverdue() || active.autoStopped) {
-        renderTimer();
-        return;
-      }
-      const priorPhase = active.phase;
-      const priorId = active.id;
-      const result = originalFinish(skip);
-
-      // The new Crosscheck phase needs its own 75/90-minute clock.
-      if (priorPhase === "study" && active &&
-          active.id === priorId && active.phase === "crosscheck") {
-        active.autoStopWarned = false;
+    const originalFinish=finishTimer;
+    finishTimer=function(skip=false){
+      if(!active)return;
+      if(stopIfOverdue()||active.autoStopped){renderTimer();return;}
+      const oldPhase=active.phase,oldId=active.id;
+      const result=originalFinish(skip);
+      if(oldPhase==="study"&&active&&active.id===oldId&&active.phase==="crosscheck"){
+        active.confirmedMs=0;
+        active.autoStopWarned=false;
+        active.autoStopped=false;
+        active.autoStoppedAt=null;
         saveActive();
       }
       return result;
     };
 
-    // This listener handles only the three new review buttons.
-    // Existing timer, Study Log and coaching buttons stay untouched.
-    document.addEventListener("click", function (event) {
-      const button = event.target.closest("button");
-      if (!button) return;
-      const action = button.dataset.timerReview;
-
-      if (!action && !(active && active.autoStopped)) return;
-
-      if (action || (active && active.autoStopped)) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-
-      if (action === "notifications") {
-        if (typeof Notification === "undefined" ||
-            typeof Notification.requestPermission !== "function") {
-          message("Device notifications are unavailable. In-app notices will still appear.");
-          return;
-        }
-        Promise.resolve(Notification.requestPermission())
-          .then(permission => {
-            message(permission === "granted"
-              ? "Browser alerts enabled when your device allows them."
-              : "In-app timer notices will still appear.");
-          })
-          .catch(() => message("Browser notifications are unavailable."));
+    function finishConfirmed(minutes,keepStudying){
+      if(!active||!active.autoStopped)return;
+      const prior=Math.max(0,Number(active.confirmedMs)||0);
+      const newTotal=prior+minutes*60000;
+      if(!keepStudying && newTotal===0 && active.phase==="study"){
+        active=null;saveActive();screen="stage";render();
+        message("No time was recorded.");
         return;
       }
-
-      if (!active || !active.autoStopped) return;
-
-      if (action === "discard") {
-        if (confirm("Discard this unfinished stage? No time will be recorded.")) {
-          active = null;
-          saveActive();
-          screen = "stage";
-          render();
-          message("Unfinished stage discarded. No time was recorded.");
-        }
+      const old={...active};
+      const phase=active.phase;
+      const stamp=active.autoStoppedAt||new Date().toISOString();
+      active.ms=newTotal;
+      active.confirmedMs=newTotal;
+      active.runningSince=null;
+      active.awayAt=null;
+      active.awayPrompt=null;
+      active.autoStopped=false;
+      active.autoStopWarned=false;
+      active.autoStoppedAt=null;
+      if(minutes>90)active.reportedExtraSeconds=
+        Math.max(0,Number(active.reportedExtraSeconds)||0)+(minutes-90)*60;
+      if(keepStudying){
+        active.runningSince=Date.now();
+        try{
+          saveActive();renderTimer();
+          message(minutes+" minute"+(minutes===1?"":"s")+
+            " confirmed for that block. You can continue studying.");
+        }catch(error){active=old;saveActive();renderTimer();message(error.message);}
         return;
       }
-
-      if (action === "skip") {
-        finishConfirmed(0);
-        return;
-      }
-
-      if (action !== "save") {
-        renderTimer();
-        return;
-      }
-
-      const input = document.getElementById("actualStudyMinutes");
-      const value = input ? String(input.value).trim() : "";
-      const minutes = /^\d{1,2}$/.test(value) || value === "90"
-        ? Number(value)
-        : NaN;
-
-      if (!Number.isInteger(minutes) || minutes < 0 || minutes > 90) {
-        message("Enter a whole number from 0 to 90.");
-        if (input) input.focus();
-        return;
-      }
-
-      if (minutes === 0 && active.phase === "study") {
-        active = null;
-        saveActive();
-        screen = "stage";
-        render();
-        message("No study time was recorded.");
-        return;
-      }
-      finishConfirmed(minutes);
-    }, true);
-
-    function finishConfirmed(minutes) {
-      const phase = active.phase;
-      confirmingStop = {
-        id: active.id,
-        phase,
-        stoppedAt: active.autoStoppedAt || new Date().toISOString()
-      };
-      const old = { ...active };
-
-      active.ms = minutes * 60000;
-      active.runningSince = null;
-      active.awayAt = null;
-      active.awayPrompt = null;
-      active.autoStopped = false;
-
-      try {
-        finishTimer(phase === "crosscheck" && minutes === 0);
-        message("Auto-stopped timer: " + minutes +
-          " minute" + (minutes === 1 ? "" : "s") +
-          " confirmed and saved locally. Google sync will follow.");
-      } catch (error) {
-        active = old;
-        saveActive();
-        renderTimer();
-        message("Could not save the confirmed time: " + error.message);
-      } finally {
-        confirmingStop = null;
+      confirmingStop={id:active.id,phase,stoppedAt:stamp};
+      try{
+        finishTimer(phase==="crosscheck"&&minutes===0);
+        message("Actual study time confirmed locally. Google sync will follow.");
+      }catch(error){
+        active=old;saveActive();renderTimer();
+        message("Could not save confirmed time: "+error.message);
+      }finally{
+        confirmingStop=null;
       }
     }
 
-    setInterval(function () {
-      try {
-        if (!active || active.autoStopped || active.runningSince === null) return;
-        if (stopIfOverdue()) {
-          renderTimer();
+    document.addEventListener("click",function(event){
+      const button=event.target.closest("button");
+      if(!button)return;
+      const action=button.dataset.timerReview;
+      if(!action&&!(active&&active.autoStopped))return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if(action==="notifications"){
+        if(typeof Notification==="undefined"||
+            typeof Notification.requestPermission!=="function"){
+          message("Browser notifications are unavailable. In-app messages will still work.");
           return;
         }
-        if (!active.autoStopWarned && rawElapsed() >= AUTO_WARN_MS) {
-          active.autoStopWarned = true;
-          saveActive();
+        Promise.resolve(Notification.requestPermission()).then(p=>{
+          message(p==="granted"?"Browser notifications enabled when your device allows them.":
+            "In-app timer notices will still appear.");
+        }).catch(()=>message("Browser notifications unavailable."));
+        return;
+      }
+      if(!active||!active.autoStopped)return;
+      if(action==="discard"){
+        if(confirm("Discard this entire stage? All confirmed blocks for this stage will be lost.")){
+          active=null;saveActive();screen="stage";render();message("Stage discarded.");
+        }
+        return;
+      }
+      if(action==="skip"){finishConfirmed(0,false);return;}
+      if(action!=="save"&&action!=="continue"){renderTimer();return;}
+      const input=document.getElementById("actualStudyMinutes");
+      const value=input?String(input.value).trim():"";
+      const minutes=/^\d{1,3}$/.test(value)?Number(value):NaN;
+      if(!Number.isInteger(minutes)||minutes<0||minutes>MAX_REPORTED_MINUTES){
+        message("Enter a whole number of actual minutes from 0 to "+MAX_REPORTED_MINUTES+".");
+        if(input)input.focus();
+        return;
+      }
+      finishConfirmed(minutes,action==="continue");
+    },true);
+
+    setInterval(function(){
+      try{
+        if(!active||active.autoStopped||active.runningSince===null)return;
+        if(stopIfOverdue()){renderTimer();return;}
+        if(!active.autoStopWarned&&currentBlockMs()>=AUTO_WARN_MS){
+          active.autoStopWarned=true;saveActive();
           timerAlert("Study Coach timer warning",
-            "Your timer is at 75 minutes. It will stop at 90 minutes.");
-          message("Timer warning: auto-stop in 15 minutes. Pause or finish if you are done.");
+            "Your current block reached 75 minutes and will stop at 90.");
+          message("Timer warning: 15 minutes until the safety stop.");
           renderTimer();
         }
-      } catch (error) {
-        console.error("Study Coach timer safeguard:", error);
-      }
-    }, 1000);
+      }catch(error){console.error("Timer safeguard:",error);}
+    },1000);
   }
   bootApp();
 
