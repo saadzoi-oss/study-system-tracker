@@ -251,6 +251,25 @@
       .vnext-small-actions { flex-wrap: wrap; }
       .vnext-manual .actions button { width: 100%; }
     }
+  
+/* BACKUP & RECOVERY — TAB ONLY */
+
+/* Hide the large backup banner above the app. */
+#recoveryStatusPanel {
+  display: none !important;
+}
+
+/* Hide the recovery notice on class setup. */
+#appRoot > section.notice:has(button[data-nav="backup"]) {
+  display: none !important;
+}
+
+/* Hide the extra recovery shortcut in Study Log. */
+#appRoot > section.card > button.text-button[data-nav="backup"] {
+  display: none !important;
+}
+
+  
   </style>
 </head>
 
